@@ -1,0 +1,50 @@
+# sdv-edge-gateway configuration
+# Loaded at runtime by main.cpp
+
+device:
+  uin: "VIN_PLACEHOLDER"           # Vehicle Identification Number — set per device
+  region: "eu"
+
+can:
+  interface_tx: "can0"             # Transmit interface (CAN simulator → can0)
+  interface_rx: "can1"             # Receive interface (gateway reads can1)
+  bitrate: 500000
+  dbc_path: "dbc/toyota_corolla.dbc"
+  # Signals to decode — filter from full DBC (200+ signals → 5 used)
+  signals:
+    - VEHICLE_SPEED
+    - ENGINE_RPM
+    - ENGINE_COOLANT_TEMP
+    - BATTERY_VOLTAGE
+    - GEAR_SHIFT
+
+mqtt:
+  broker: "YOUR_ENDPOINT.iot.eu-west-1.amazonaws.com"
+  port: 8883
+  client_id: "sdv-gateway-VIN_PLACEHOLDER"
+  keep_alive_sec: 60
+  # Topics — mirror Stellantis PSA naming (psa/<channel>/from|to/uin/<UIN>)
+  topic_telemetry_up:   "psa/DataCollect/from/uin/VIN_PLACEHOLDER/telemetry"
+  topic_command_in:     "psa/RemoteServices/to/uin/VIN_PLACEHOLDER/command"
+  topic_command_status: "psa/RemoteServices/from/uin/VIN_PLACEHOLDER/status"
+  topic_ota_manifest:   "psa/DeviceManagement/to/uin/VIN_PLACEHOLDER/ota/manifest"
+  topic_ota_status:     "psa/DeviceManagement/from/uin/VIN_PLACEHOLDER/ota/status"
+
+tls:
+  ca_cert:     "certs/AmazonRootCA1.pem"
+  device_cert: "certs/device.pem.crt"
+  device_key:  "certs/private.pem.key"
+
+telemetry:
+  publish_interval_ms: 1000        # Publish every 1 second
+  offline_db_path: "buffer.db"
+  offline_max_rows: 10000          # Max rows to buffer before dropping oldest
+
+ota:
+  firmware_dir: "/tmp/ota_staging"
+  active_slot: "A"                 # A/B partition
+  preconditions:
+    max_speed_kmh: 0               # Vehicle must be stopped
+    min_battery_v: 11.5
+    min_free_storage_mb: 50
+  public_key_path: "certs/ota_verify.pem"  # ECDSA public key for firmware signature
