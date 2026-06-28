@@ -86,7 +86,7 @@ and with on-device intelligence** — not just pipe bytes to the cloud.
 ## 4. Deep Dive — Key Design Decisions
 
 ### DD-01: Why C++ for vehicle-side, Python only for cloud?
-Automotive software is C++. RTCU, DriveOS, AUTOSAR Adaptive ara:: — all C++.
+Automotive software is C++. DriveOS, AUTOSAR Adaptive ara:: — all C++.
 Python interpretation overhead is incompatible with deterministic timing requirements.
 ONNX Runtime C++ API runs on ARM Linux (Pi) with same model as Python onnxruntime.
 
@@ -100,11 +100,11 @@ Demo on Pi: ONNX Runtime CPU → ~50ms. Shows the portability layer correctly.
 ### DD-03: Why two-layer offline resilience?
 Layer 1: MQTT Persistent Session (broker holds QoS1 messages during TCP disconnect)
 Layer 2: SQLite offline buffer (handles broker-side capacity limits + long outages)
-Pattern from RTCU DataCollect: assumes 30-min cellular dead zones in some regions.
+Pattern assumes 30-min cellular dead zones in some regions — common in automotive telematics.
 
 ### DD-04: Why A/B rollback instead of single-slot OTA?
 Single-slot: brick risk if power fails mid-install. No recovery without physical access.
-A/B: active slot unchanged until new slot validates. Power-fail safe. RTCU uses same pattern.
+A/B: active slot unchanged until new slot validates. Power-fail safe. Standard automotive OTA pattern.
 ISO 26262 SG-01 requires the vehicle to remain operational if OTA fails.
 
 ### DD-05: Human-in-the-loop for CRITICAL anomalies

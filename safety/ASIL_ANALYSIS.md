@@ -64,7 +64,7 @@ ISO 26262 §5.9.1 — ASIL decomposition allows ASIL-C to be split into two inde
 | LLM diagnostic agent | QM | Cloud-only, no direct vehicle actuation |
 | YOLOv8 ADAS simulator | QM | Tool only, not in production gateway binary |
 
-**Linux OS note:** Linux (Raspberry Pi OS) does NOT provide FFI. This is a development/demo platform. Production deployment requires QNX or AUTOSAR OS (as used in RTCU DriveOS stack) for ASIL certification.
+**Linux OS note:** Linux (Raspberry Pi OS) does NOT provide FFI. This is a development/demo platform. Production deployment requires QNX or AUTOSAR OS for ASIL certification.
 
 ---
 

@@ -23,23 +23,23 @@ POLICY_DOCUMENT = {
             "Effect": "Allow",
             "Action": "iot:Publish",
             "Resource": [
-                "arn:aws:iot:*:*:topic/psa/DataCollect/from/uin/*",
-                "arn:aws:iot:*:*:topic/psa/RemoteServices/from/uin/*",
-                "arn:aws:iot:*:*:topic/psa/DeviceManagement/from/uin/*"
+                "arn:aws:iot:*:*:topic/sdv/DataCollect/from/uin/*",
+                "arn:aws:iot:*:*:topic/sdv/RemoteServices/from/uin/*",
+                "arn:aws:iot:*:*:topic/sdv/DeviceManagement/from/uin/*"
             ]
         },
         {
             "Effect": "Allow",
             "Action": "iot:Subscribe",
             "Resource": [
-                "arn:aws:iot:*:*:topicfilter/psa/RemoteServices/to/uin/*",
-                "arn:aws:iot:*:*:topicfilter/psa/DeviceManagement/to/uin/*"
+                "arn:aws:iot:*:*:topicfilter/sdv/RemoteServices/to/uin/*",
+                "arn:aws:iot:*:*:topicfilter/sdv/DeviceManagement/to/uin/*"
             ]
         },
         {
             "Effect": "Allow",
             "Action": "iot:Receive",
-            "Resource": "arn:aws:iot:*:*:topic/psa/*"
+            "Resource": "arn:aws:iot:*:*:topic/sdv/*"
         }
     ]
 }

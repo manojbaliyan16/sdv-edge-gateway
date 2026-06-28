@@ -5,14 +5,14 @@ CONNECTS TO:
   AGI.1 — RAG (retrieves relevant ISO 26262 DTC context for the anomaly)
   AGI.2 — Agentic AI (multi-step: detect → retrieve → diagnose → recommend → publish)
 
-Trigger: AWS IoT Rule routes psa/Analytics/from/uin/+/anomaly → this Lambda.
+Trigger: AWS IoT Rule routes sdv/Analytics/from/uin/+/anomaly → this Lambda.
 
 Flow (agentic pipeline):
   1. Parse anomaly event from MQTT payload
   2. Retrieve relevant DTC / ISO 26262 context from vector store (RAG)
   3. Call LLM (AWS Bedrock Claude) with: vehicle state + anomaly + retrieved context
   4. Parse LLM response: root cause + severity + recommended action
-  5. Publish diagnosis back to vehicle: psa/Analytics/to/uin/<UIN>/diagnosis
+  5. Publish diagnosis back to vehicle: sdv/Analytics/to/uin/<UIN>/diagnosis
 
 Design decision: Human-in-the-loop for CRITICAL severity.
   - WARNING  → auto-publish diagnosis to vehicle
@@ -113,7 +113,7 @@ Provide a concise diagnostic response in JSON with keys:
 
 def publish_diagnosis(uin: str, diagnosis: dict):
     """Publish LLM diagnosis back to vehicle over MQTT."""
-    topic = f"psa/Analytics/to/uin/{uin}/diagnosis"
+    topic = f"sdv/Analytics/to/uin/{uin}/diagnosis"
     iot_data.publish(
         topic=topic,
         qos=1,
@@ -141,7 +141,7 @@ def alert_human_operator(uin: str, anomaly: dict, diagnosis: dict):
 def lambda_handler(event, context):
     """
     Lambda entry point. Triggered by AWS IoT Core rule on:
-    psa/Analytics/from/uin/+/anomaly
+    sdv/Analytics/from/uin/+/anomaly
     """
     try:
         anomaly = json.loads(event.get("payload", "{}"))

@@ -58,7 +58,7 @@
 **Attack path:** Compromised gateway uses valid AWS IoT cert to subscribe to other vehicles' topics  
 **Impact:** Fleet-wide data access  
 **MITIGATED by:**  
-- AWS IoT policy scope-locked to `psa/*/uin/<THIS_UIN>/*` — verified in `cloud/iot_setup/policy.json`  
+- AWS IoT policy scope-locked to `sdv/*/uin/<THIS_UIN>/*` — verified in `cloud/iot_setup/policy.json`  
 - Per-vehicle cert: one Thing = one cert = one policy  
 **Residual risk:** Low ✅
 
