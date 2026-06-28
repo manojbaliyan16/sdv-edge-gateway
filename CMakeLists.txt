@@ -50,12 +50,10 @@ target_include_directories(sdv_gateway PRIVATE
 )
 
 target_link_libraries(sdv_gateway PRIVATE
-    can_layer
-    gateway
-    security
-    analytics
+    gateway                       # only module built so far
     OpenSSL::SSL
     OpenSSL::Crypto
     Threads::Threads
     yaml-cpp                      # main.cpp loads config.yaml at startup
+    # can_layer, security, analytics — added as each module is implemented
 )
