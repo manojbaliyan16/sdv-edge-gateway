@@ -34,6 +34,9 @@ find_library(PAHO_MQTT_C_LIB   paho-mqtt3as  REQUIRED)  # C core
 find_library(PAHO_MQTT_CPP_LIB paho-mqttpp3  REQUIRED)  # C++ wrapper (depends on C core)
 find_path   (PAHO_INCLUDE      mqtt/async_client.h REQUIRED)  # folder containing mqtt/
 
+# yaml-cpp — ships a CMake config, use find_package for named target
+find_package(yaml-cpp REQUIRED)
+
 # ─── Modules ──────────────────────────────────────────────────────────────────
 # Order reflects dependency hierarchy — can_layer has no deps, gateway uses it
 add_subdirectory(src/can_layer)
@@ -50,10 +53,11 @@ target_include_directories(sdv_gateway PRIVATE
 )
 
 target_link_libraries(sdv_gateway PRIVATE
-    gateway                       # only module built so far
+    gateway
+    can_layer
     OpenSSL::SSL
     OpenSSL::Crypto
     Threads::Threads
-    yaml-cpp                      # main.cpp loads config.yaml at startup
-    # can_layer, security, analytics — added as each module is implemented
+    yaml-cpp::yaml-cpp            # main.cpp loads config.yaml at startup
+    # security, analytics — added as each module is implemented
 )
