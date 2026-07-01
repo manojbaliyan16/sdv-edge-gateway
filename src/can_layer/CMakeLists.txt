@@ -1,5 +1,6 @@
 add_library(can_layer STATIC
     signal_decoder.cpp
+    can_reader.cpp
 )
 
 target_include_directories(can_layer
