@@ -1,6 +1,7 @@
 add_library(can_layer STATIC
     signal_decoder.cpp
     can_reader.cpp
+    can_writer.cpp    # remote-command actuation — mirrors can_reader's socket setup
 )
 
 target_include_directories(can_layer
