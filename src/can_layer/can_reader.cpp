@@ -144,4 +144,24 @@ void CanReader::run()
     }
 }
 
+#else  // ── Non-Linux (Mac dev build) — no-op stubs so the binary links ────────
+// SocketCAN is Linux-only. On Mac we compile empty stubs so main.cpp links.
+// The gateway is always deployed on Pi (Linux) — these stubs never run in production.
+
+CanReader::CanReader(SafeQueue<CanFrame>& queue, const std::string& interface_name)
+    : queue_(queue), interface_(interface_name) {}
+
+CanReader::~CanReader() { stop(); }
+
+bool CanReader::start()  { return true; }   // no-op — no SocketCAN on Mac
+
+void CanReader::stop()
+{
+    running_ = false;
+    if (thread_.joinable()) thread_.join();
+}
+
+void CanReader::run()    {}                  // never spawned on Mac
+int  CanReader::open_socket() { return -1; } // no SocketCAN on Mac
+
 #endif // __linux__

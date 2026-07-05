@@ -59,6 +59,7 @@ add_executable(sdv_gateway src/main.cpp)
 target_include_directories(sdv_gateway PRIVATE
     ${CMAKE_SOURCE_DIR}/include   # our headers: common/, gateway/, can_layer/ etc.
     ${PAHO_INCLUDE}               # mqtt/async_client.h — main.cpp wires up the client
+    ${ONNXRUNTIME_INCLUDE}        # onnxruntime_cxx_api.h — anomaly_detector.hpp pulled in by main.cpp
 )
 
 target_link_libraries(sdv_gateway PRIVATE

@@ -141,4 +141,21 @@ bool CanWriter::write(CommandType type, const std::string& /*payload_json*/)
     return nbytes == static_cast<ssize_t>(sizeof(frame));
 }
 
+#else  // ── Non-Linux (Mac dev build) — no-op stubs ───────────────────────────
+
+const std::unordered_map<CommandType, uint32_t> CanWriter::COMMAND_CAN_ID = {};
+
+CanWriter::CanWriter(const std::string& interface_name) : interface_(interface_name) {}
+CanWriter::~CanWriter() { stop(); }
+
+bool CanWriter::start()  { return true; }
+void CanWriter::stop()   { open_ = false; socket_fd_ = -1; }
+
+bool CanWriter::write(CommandType /*type*/, const std::string& /*payload_json*/)
+{
+    return false;   // no SocketCAN on Mac — always a no-op
+}
+
+int  CanWriter::open_socket() { return -1; }
+
 #endif // __linux__

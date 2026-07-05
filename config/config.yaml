@@ -40,6 +40,10 @@ telemetry:
   offline_db_path: "buffer.db"
   offline_max_rows: 10000          # Max rows to buffer before dropping oldest
 
+anomaly:
+  model_path: "/opt/sdv/anomaly_detector.onnx"   # built by tools/train_anomaly_model.py
+  threshold: 0.85                                  # score > this fires an MQTT alert
+
 ota:
   firmware_dir: "/tmp/ota_staging"
   active_slot: "A"                 # A/B partition
