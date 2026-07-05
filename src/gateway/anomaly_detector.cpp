@@ -148,18 +148,30 @@ float AnomalyDetector::run_inference(const DecodedSignal& signal)
 }
 
 // ─── publish_alert ────────────────────────────────────────────────────────────
-// Publishes anomaly alert JSON to "alerts/<uin>/anomaly" (QoS 1).
+// Publishes anomaly alert JSON to "sdv/Analytics/from/uin/<uin>/anomaly" (QoS 1).
+// Topic matches the AWS IoT Rule trigger in create_infrastructure.py which routes
+// to diagnostic_agent Lambda (RAG + Bedrock diagnosis + human-in-the-loop for CRITICAL).
 
 void AnomalyDetector::publish_alert(const DecodedSignal& signal, float score)
 {
+    // Determine severity band — used by diagnostic_agent.py to decide
+    // whether to auto-publish diagnosis (WARNING) or escalate to human (CRITICAL).
+    std::string severity = (score > 0.95f) ? "CRITICAL" : "WARNING";
+
     nlohmann::json j;
+    j["uin"]            = uin_;                 // required by diagnostic_agent.py
     j["signal_name"]    = signal.name;
     j["value"]          = signal.value;
     j["unit"]           = signal.unit;
     j["anomaly_score"]  = score;
+    j["anomaly_prob"]   = score;                // alias — diagnostic_agent.py uses this key
     j["threshold"]      = anomaly_threshold_;
+    j["severity"]       = severity;
+    j["vehicle_speed_kmh"] = 0.0;               // populated by future context; 0 = safe assumption
 
-    std::string topic = "alerts/" + uin_ + "/anomaly";
+    // Topic aligned with diagnostic_agent.py IoT Rule trigger:
+    // sdv/Analytics/from/uin/+/anomaly
+    std::string topic = "sdv/Analytics/from/uin/" + uin_ + "/anomaly";
 
     try {
         auto msg = mqtt::make_message(topic, j.dump(), QOS, false);
