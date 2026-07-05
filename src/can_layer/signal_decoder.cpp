@@ -25,11 +25,13 @@ bool SignalDecoder::load(const std::string& dbc_path,
     // BO_ 100 VEHICLE_INFO: 8 Vector__XXX
     const std::regex bo_re(R"(^BO_\s+(\d+))");
 
-    // SG_ VEHICLE_SPEED : 5|12@1+ (0.01,0) [0|163.83] 'km/h' Vector__XXX
+    // SG_ VEHICLE_SPEED : 5|12@1+ (0.01,0) [0|163.83] "km/h" Vector__XXX
+    // Standard DBC uses double-quoted units; some tools emit single-quoted.
+    // Pattern accepts both: ['"](unit)['"]. Capture group 8 = unit string.
     const std::regex sg_re(
-        R"(^\s+SG_\s+(\w+)\s*:\s*(\d+)\|(\d+)@([01])([+-])\s*\(([^,]+),([^)]+)\)[^']*'([^']*)')");
-    //                 ^^^^         ^^^^   ^^^^   ^^^   ^^^        ^^^^     ^^^^            ^^^^
-    //                 name      start  length endian signed     scale   offset            unit
+        R"(^\s+SG_\s+(\w+)\s*:\s*(\d+)\|(\d+)@([01])([+-])\s*\(([^,]+),([^)]+)\)[^"']*["']([^"']*)["'])");
+    //                 ^^^^         ^^^^   ^^^^   ^^^   ^^^        ^^^^     ^^^^              ^^^^
+    //                 name      start  length endian signed     scale   offset              unit
 
     // ── 4. Parse line by line ──────────────────────────────────────────────
     uint32_t    current_can_id = 0;

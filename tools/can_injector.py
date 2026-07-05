@@ -21,15 +21,18 @@ FRAMES = [
 ]
 
 def build_speed_rpm_frame(speed_kmh: float, rpm: float) -> bytes:
-    """Encode VEHICLE_SPEED and ENGINE_RPM into CAN ID 0x0B4 payload."""
+    """Encode VEHICLE_SPEED and ENGINE_RPM into CAN ID 0x0B4 payload.
+    Intel LE (little-endian): LSB at lower byte address, MSB at higher.
+    Matches DBC: VEHICLE_SPEED start_bit=40|16@1+, ENGINE_RPM start_bit=24|16@1+
+    """
     speed_raw = int(speed_kmh / 0.01)
     rpm_raw   = int(rpm / 0.25)
     data = bytearray(8)
-    # Big-endian encoding per Toyota DBC
-    data[5] = (speed_raw >> 8) & 0xFF
-    data[6] = speed_raw & 0xFF
-    data[3] = (rpm_raw >> 8) & 0xFF
-    data[4] = rpm_raw & 0xFF
+    # Intel LE: low byte at lower index — must match SignalDecoder bit extraction
+    data[5] = speed_raw & 0xFF           # VEHICLE_SPEED LSB  (start_bit 40 = byte 5)
+    data[6] = (speed_raw >> 8) & 0xFF   # VEHICLE_SPEED MSB  (byte 6)
+    data[3] = rpm_raw & 0xFF             # ENGINE_RPM LSB     (start_bit 24 = byte 3)
+    data[4] = (rpm_raw >> 8) & 0xFF     # ENGINE_RPM MSB     (byte 4)
     return bytes(data)
 
 def build_coolant_frame(temp_c: float) -> bytes:
