@@ -34,8 +34,17 @@ find_library(PAHO_MQTT_C_LIB   paho-mqtt3as  REQUIRED)  # C core
 find_library(PAHO_MQTT_CPP_LIB paho-mqttpp3  REQUIRED)  # C++ wrapper (depends on C core)
 find_path   (PAHO_INCLUDE      mqtt/async_client.h REQUIRED)  # folder containing mqtt/
 
+# libcurl — HTTPS download for OTA firmware (ota_agent.cpp)
+find_package(CURL REQUIRED)
+
 # yaml-cpp — ships a CMake config, use find_package for named target
 find_package(yaml-cpp REQUIRED)
+
+# ONNX Runtime — no CMake config, find pieces manually (same pattern as SQLite3/Paho)
+# Install on Pi:  pip install onnxruntime  (or apt install libonnxruntime-dev)
+# Install on Mac: pip install onnxruntime  (headers + lib land in Python site-packages)
+find_library(ONNXRUNTIME_LIB     onnxruntime           REQUIRED)
+find_path   (ONNXRUNTIME_INCLUDE onnxruntime_cxx_api.h  REQUIRED)
 
 # ─── Modules ──────────────────────────────────────────────────────────────────
 # Order reflects dependency hierarchy — can_layer has no deps, gateway uses it
