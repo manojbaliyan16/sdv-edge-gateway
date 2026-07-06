@@ -24,8 +24,8 @@ Usage:
   python3 tools/train_anomaly_model.py
   python3 tools/train_anomaly_model.py --dbc dbc/toyota_corolla.dbc --output tools/anomaly_detector.onnx
 
-Deploy to Pi:
-  scp tools/anomaly_detector.onnx manoj@manoj-tcu:/opt/sdv/anomaly_detector.onnx
+Deploy to Pi (BOTH files — model uses ONNX external data format):
+  scp tools/anomaly_detector.onnx tools/anomaly_detector.onnx.data manoj@manoj-tcu:/opt/sdv/
 """
 
 import argparse
@@ -296,9 +296,10 @@ def main() -> None:
     print("\n4. Running sanity check...")
     sanity_check(args.output)
 
-    print(f"\nDone. Deploy to Pi:")
+    data_file = args.output + ".data"
+    print(f"\nDone. Deploy to Pi (BOTH files — ONNX external data format):")
     print(f"  sudo mkdir -p /opt/sdv")
-    print(f"  scp {args.output} manoj@manoj-tcu:/opt/sdv/anomaly_detector.onnx")
+    print(f"  scp {args.output} {data_file} manoj@manoj-tcu:/opt/sdv/")
 
 
 if __name__ == "__main__":

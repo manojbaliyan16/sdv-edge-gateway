@@ -16,7 +16,8 @@ CommandHandler::CommandHandler(mqtt::async_client& mqtt_client,
     , ota_queue_(ota_queue)
     , can_writer_(can_writer)
     , uin_(uin)
-    , topic_("ota/" + uin + "/command")   // built once — reused by subscribe/unsubscribe
+    , topic_("sdv/commands/to/uin/" + uin)                      // remote ops downlink
+    , diagnosis_topic_("sdv/Analytics/to/uin/" + uin + "/diagnosis") // LLM diagnosis downlink
 {}
 
 CommandHandler::~CommandHandler()
@@ -38,7 +39,10 @@ bool CommandHandler::start()
     }
 
     try {
-        mqtt_client_.subscribe(topic_, QOS)->wait();
+        // Subscribe to BOTH downlink topics.
+        // Paho subscribes are independent calls; either can throw independently.
+        mqtt_client_.subscribe(topic_,           QOS)->wait();
+        mqtt_client_.subscribe(diagnosis_topic_, QOS)->wait();
     } catch (const mqtt::exception& e) {
         DLT_LOG(ch_ctx, DLT_LOG_ERROR,
                 DLT_STRING("Subscribe failed:"), DLT_STRING(e.what()));
@@ -52,7 +56,10 @@ bool CommandHandler::start()
     thread_  = std::thread(&CommandHandler::run, this);
 
     DLT_LOG(ch_ctx, DLT_LOG_INFO,
-            DLT_STRING("CommandHandler subscribed to"), DLT_STRING(topic_.c_str()));
+            DLT_STRING("CommandHandler subscribed to"),
+            DLT_STRING(topic_.c_str()),
+            DLT_STRING("and"),
+            DLT_STRING(diagnosis_topic_.c_str()));
     return true;
 }
 
@@ -68,6 +75,7 @@ void CommandHandler::stop()
 
     try {
         mqtt_client_.unsubscribe(topic_)->wait();
+        mqtt_client_.unsubscribe(diagnosis_topic_)->wait();
     } catch (const mqtt::exception& e) {
         DLT_LOG(ch_ctx, DLT_LOG_WARN,
                 DLT_STRING("Unsubscribe error:"), DLT_STRING(e.what()));
@@ -96,6 +104,16 @@ void CommandHandler::run()
             continue;   // defensive — shouldn't happen if try_consume_message_for returned true
         }
 
+        // Route by topic — two downlink channels share the same consumer loop.
+        if (msg->get_topic() == diagnosis_topic_) {
+            // Diagnosis from diagnostic_agent Lambda: log and display to driver.
+            // Does NOT go through dedup guard — diagnoses are informational, not
+            // actuating, so redelivery just logs the same message twice (harmless).
+            handle_diagnosis(msg->get_payload_str());
+            continue;
+        }
+
+        // Remote ops command path — parse + dedup + route.
         Command cmd;
         if (!parse_command(msg->get_payload_str(), cmd)) {
             DLT_LOG(ch_ctx, DLT_LOG_ERROR,
@@ -194,5 +212,48 @@ void CommandHandler::route(const Command& cmd)
             DLT_LOG(ch_ctx, DLT_LOG_WARN,
                     DLT_STRING("Unknown command type, dropped"));
             break;
+    }
+}
+
+// ─── Private: handle_diagnosis ────────────────────────────────────────────────
+// Receives LLM diagnosis from diagnostic_agent Lambda (cloud→vehicle downlink).
+// This CLOSES the full loop:
+//   AnomalyDetector → MQTT → IoT Core → Lambda → RAG+LLM → MQTT → here
+//
+// Payload from diagnostic_agent.py:
+//   {
+//     "root_cause":        "Engine over-temperature — thermal runaway risk",
+//     "recommended_action":"Reduce engine load, pull over safely if sustained",
+//     "driver_message":    "Engine too hot. Reduce speed and pull over soon.",
+//     "dtc":               "P0217",
+//     "asil":              "ASIL-B",
+//     "escalate_human":    false,
+//     "timestamp":         "2026-07-10T12:34:56"
+//   }
+//
+// In production (AUTOSAR Adaptive): route to ara::com service that drives the
+// instrument cluster DTC display. Here: DLT_LOG for Pi demo.
+
+void CommandHandler::handle_diagnosis(const std::string& payload)
+{
+    try {
+        auto j = nlohmann::json::parse(payload);
+
+        std::string driver_msg = j.value("driver_message", std::string(""));
+        std::string dtc        = j.value("dtc",            std::string(""));
+        std::string asil       = j.value("asil",           std::string(""));
+        std::string root_cause = j.value("root_cause",     std::string(""));
+
+        // DLT_LOG_WARN so the diagnosis stands out from routine INFO telemetry.
+        DLT_LOG(ch_ctx, DLT_LOG_WARN,
+                DLT_STRING("[DIAGNOSIS]"),
+                DLT_STRING("DTC:"),       DLT_STRING(dtc.c_str()),
+                DLT_STRING("ASIL:"),      DLT_STRING(asil.c_str()),
+                DLT_STRING("Driver:"),    DLT_STRING(driver_msg.c_str()),
+                DLT_STRING("RootCause:"), DLT_STRING(root_cause.c_str()));
+
+    } catch (const nlohmann::json::exception& e) {
+        DLT_LOG(ch_ctx, DLT_LOG_ERROR,
+                DLT_STRING("handle_diagnosis — bad JSON:"), DLT_STRING(e.what()));
     }
 }

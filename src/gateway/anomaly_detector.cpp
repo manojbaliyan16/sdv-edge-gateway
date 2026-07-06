@@ -100,7 +100,7 @@ void AnomalyDetector::run()
 // Step A: session_->Run() → inference
 // Step C: unpack score from output tensor → return
 //
-// Input shape: [1, 3] — batch=1, features=(physical_value, raw_value, can_id)
+// Input shape: [1, 1] — batch=1, features=1 (physical_value from DecodedSignal.value)
 // Output shape: [1, 1] — batch=1, anomaly score in [0.0, 1.0]
 
 float AnomalyDetector::run_inference(const DecodedSignal& signal)
@@ -131,7 +131,7 @@ float AnomalyDetector::run_inference(const DecodedSignal& signal)
 
     // ── A: Run inference ──────────────────────────────────────────────────────
     // Input/output node names must match what the model was exported with.
-    // These are set at export time (tools/export_anomaly_model.py).
+    // These are set at export time (tools/train_anomaly_model.py).
     const char* input_names[]  = {"signal_features"};
     const char* output_names[] = {"anomaly_score"};
 

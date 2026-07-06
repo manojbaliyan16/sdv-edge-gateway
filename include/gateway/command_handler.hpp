@@ -1,9 +1,11 @@
 #pragma once
-// command_handler.hpp — receives remote commands from the cloud over MQTT and
-// routes each one to whichever module actually executes it.
+// command_handler.hpp — receives remote commands and cloud diagnostics over MQTT.
 //
-// Topic: ota/<uin>/command  (cloud→vehicle direction — downstream of telemetry)
-// QoS:   1 (at-least-once). See the dedup guard below for why that matters.
+// Subscribes to TWO topics (both cloud→vehicle downlink):
+//   sdv/commands/to/uin/<uin>            — remote ops (CAN_WRITE, OTA_UPDATE, DIAGNOSTIC_QUERY)
+//   sdv/Analytics/to/uin/<uin>/diagnosis — LLM diagnosis from diagnostic_agent Lambda
+//
+// QoS: 1 (at-least-once). Dedup guard prevents double-execution on redelivery.
 
 #include <string>
 #include <thread>
@@ -66,9 +68,16 @@ private:
     SafeQueue<Command>&  ota_queue_;
     CanWriter&           can_writer_;
 
+    // Parses a diagnosis JSON payload and logs it via DLT.
+    // diagnostic_agent Lambda publishes:
+    //   {"root_cause": "...", "recommended_action": "...", "driver_message": "...",
+    //    "dtc": "P0217", "asil": "ASIL-B", "escalate_human": false}
+    void handle_diagnosis(const std::string& payload);
+
     // ── Identity ─────────────────────────────────────────────────────────────
     std::string          uin_;
-    std::string          topic_;      // "ota/<uin>/command" — built once in ctor
+    std::string          topic_;           // sdv/commands/to/uin/<uin>
+    std::string          diagnosis_topic_; // sdv/Analytics/to/uin/<uin>/diagnosis
 
     // ── Thread control ───────────────────────────────────────────────────────
     std::thread          thread_;
