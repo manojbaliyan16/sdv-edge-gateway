@@ -11,38 +11,62 @@ import json
 import os
 import argparse
 
-POLICY_DOCUMENT = {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": "iot:Connect",
-            "Resource": "arn:aws:iot:*:*:client/sdv-gateway-*"
-        },
-        {
-            "Effect": "Allow",
-            "Action": "iot:Publish",
-            "Resource": [
-                "arn:aws:iot:*:*:topic/sdv/DataCollect/from/uin/*",
-                "arn:aws:iot:*:*:topic/sdv/RemoteServices/from/uin/*",
-                "arn:aws:iot:*:*:topic/sdv/DeviceManagement/from/uin/*"
-            ]
-        },
-        {
-            "Effect": "Allow",
-            "Action": "iot:Subscribe",
-            "Resource": [
-                "arn:aws:iot:*:*:topicfilter/sdv/RemoteServices/to/uin/*",
-                "arn:aws:iot:*:*:topicfilter/sdv/DeviceManagement/to/uin/*"
-            ]
-        },
-        {
-            "Effect": "Allow",
-            "Action": "iot:Receive",
-            "Resource": "arn:aws:iot:*:*:topic/sdv/*"
-        }
-    ]
-}
+def build_policy_document(uin: str) -> dict:
+    """
+    IAM-style policy for this device's X.509 cert, scoped to ITS OWN uin only.
+    Topics here MUST match the real topics used across the codebase:
+      config.yaml            -> sdv/telemetry/from/uin/<uin>, sdv/commands/to/uin/<uin>,
+                                 sdv/commands/from/uin/<uin>/status, sdv/ota/to/uin/<uin>/manifest,
+                                 sdv/ota/from/uin/<uin>/status
+      anomaly_detector.cpp    -> sdv/Analytics/from/uin/<uin>/anomaly
+      command_handler.cpp     -> subscribes sdv/commands/to/uin/<uin> and
+                                 sdv/Analytics/to/uin/<uin>/diagnosis
+    (Previous version of this policy used sdv/DataCollect/*, sdv/RemoteServices/*,
+    sdv/DeviceManagement/* — topic names that appear nowhere else in this repo. That
+    mismatch would have connected fine and then silently denied every publish/subscribe,
+    visible only in AWS CloudWatch, not in gateway logs. Fixed 11-Jul-26.)
+
+    Scoped to this uin specifically (not a wildcard) so a compromised cert can't
+    publish or subscribe as a different vehicle.
+    """
+    return {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": "iot:Connect",
+                "Resource": f"arn:aws:iot:*:*:client/sdv-gateway-{uin}"
+            },
+            {
+                "Effect": "Allow",
+                "Action": "iot:Publish",
+                "Resource": [
+                    f"arn:aws:iot:*:*:topic/sdv/telemetry/from/uin/{uin}",
+                    f"arn:aws:iot:*:*:topic/sdv/commands/from/uin/{uin}/status",
+                    f"arn:aws:iot:*:*:topic/sdv/ota/from/uin/{uin}/status",
+                    f"arn:aws:iot:*:*:topic/sdv/Analytics/from/uin/{uin}/anomaly"
+                ]
+            },
+            {
+                "Effect": "Allow",
+                "Action": "iot:Subscribe",
+                "Resource": [
+                    f"arn:aws:iot:*:*:topicfilter/sdv/commands/to/uin/{uin}",
+                    f"arn:aws:iot:*:*:topicfilter/sdv/ota/to/uin/{uin}/manifest",
+                    f"arn:aws:iot:*:*:topicfilter/sdv/Analytics/to/uin/{uin}/diagnosis"
+                ]
+            },
+            {
+                "Effect": "Allow",
+                "Action": "iot:Receive",
+                "Resource": [
+                    f"arn:aws:iot:*:*:topic/sdv/commands/to/uin/{uin}",
+                    f"arn:aws:iot:*:*:topic/sdv/ota/to/uin/{uin}/manifest",
+                    f"arn:aws:iot:*:*:topic/sdv/Analytics/to/uin/{uin}/diagnosis"
+                ]
+            }
+        ]
+    }
 
 def main():
     parser = argparse.ArgumentParser()
@@ -70,7 +94,7 @@ def main():
     print("[setup] Creating and attaching policy")
     policy_name = f"sdv-gateway-policy-{args.uin}"
     iot.create_policy(policyName=policy_name,
-                      policyDocument=json.dumps(POLICY_DOCUMENT))
+                      policyDocument=json.dumps(build_policy_document(args.uin)))
     iot.attach_policy(policyName=policy_name, target=cert_arn)
     iot.attach_thing_principal(thingName=thing_name, principal=cert_arn)
 
