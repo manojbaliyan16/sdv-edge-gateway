@@ -34,7 +34,7 @@ TABLE_ANOMALIES = "sdv_anomalies"
 
 def create_dynamo_table(dynamo, table_name: str):
     """Create DynamoDB table with uin (PK) + timestamp (SK). Idempotent."""
-    existing = [t["TableName"] for t in dynamo.list_tables()["TableNames"]]
+    existing = dynamo.list_tables()["TableNames"]
     if table_name in existing:
         print(f"  [DynamoDB] Table '{table_name}' already exists — skipping")
         return dynamo.describe_table(TableName=table_name)["Table"]["TableArn"]
