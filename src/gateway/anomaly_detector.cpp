@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 
 #include <array>
+#include <sstream>
 #include <stdexcept>
 #include "common/debug_log.hpp"  // mutex-protected std::cerr — see header for why
 
@@ -98,6 +99,11 @@ void AnomalyDetector::run()
             DLT_LOG(anomaly_ctx, DLT_LOG_WARN,
                     DLT_STRING("ANOMALY detected — score:"), DLT_FLOAT32(score),
                     DLT_STRING("signal:"), DLT_STRING(signal.name.c_str()));
+            std::ostringstream dbg;
+            dbg << "[DEBUG] AnomalyDetector: ANOMALY detected — signal=" << signal.name
+                << " value=" << signal.value << " score=" << score
+                << " threshold=" << anomaly_threshold_ << "\n";
+            debug_log(dbg.str());
             publish_alert(signal, score);
         }
     }
@@ -191,8 +197,17 @@ void AnomalyDetector::publish_alert(const DecodedSignal& signal, float score)
     try {
         auto msg = mqtt::make_message(topic, j.dump(), QOS, false);
         mqtt_client_.publish(msg)->wait();
+        // TEMPORARY 12-Jul-26: debug_log fallback, same reason as CanReader/
+        // TelemetryPublisher — DLT delivery is unverified, this is the only
+        // reliable way to see confirmation of a successful publish.
+        std::ostringstream dbg;
+        dbg << "[INFO] AnomalyDetector: published to " << topic
+            << " — signal=" << signal.name << " value=" << signal.value
+            << " score=" << score << " severity=" << severity << "\n";
+        debug_log(dbg.str());
     } catch (const mqtt::exception& e) {
         DLT_LOG(anomaly_ctx, DLT_LOG_ERROR,
                 DLT_STRING("publish_alert failed:"), DLT_STRING(e.what()));
+        debug_log(std::string("[ERROR] AnomalyDetector: MQTT publish failed: ") + e.what() + "\n");
     }
 }
