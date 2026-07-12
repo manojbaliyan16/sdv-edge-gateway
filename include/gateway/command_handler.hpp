@@ -39,7 +39,8 @@ public:
                             const std::string& uin);
     ~CommandHandler();
 
-    // Subscribes to ota/<uin>/command (QoS 1), spawns the consumer thread.
+    // Subscribes to sdv/commands/to/uin/<uin> and sdv/Analytics/to/uin/<uin>/diagnosis
+    // (QoS 1), spawns the consumer thread.
     // Returns false if the client isn't connected yet or subscribe fails.
     bool start();
 

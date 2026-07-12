@@ -6,7 +6,7 @@
 //        → rollback on any failure after backup
 //
 // Runs on its own thread. Publishes OtaStatus back to cloud on topic:
-//   ota/<uin>/status
+//   sdv/ota/from/uin/<uin>/status
 
 #include <string>
 #include <thread>
@@ -78,7 +78,7 @@ private:
     // Called automatically if flash_firmware() fails.
     bool rollback();
 
-    // Publishes OtaStatus to "ota/<uin>/status" as JSON.
+    // Publishes OtaStatus to "sdv/ota/from/uin/<uin>/status" as JSON.
     // correlation_id is echoed back so cloud can match this status to its request.
     void report_status(const std::string& correlation_id, const OtaStatus& status);
 

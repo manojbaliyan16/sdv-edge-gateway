@@ -341,8 +341,12 @@ bool OtaAgent::rollback()
 }
 
 // ─── report_status ────────────────────────────────────────────────────────────
-// Publishes OtaStatus as JSON to "ota/<uin>/status" (QoS 1).
+// Publishes OtaStatus as JSON to "sdv/ota/from/uin/<uin>/status" (QoS 1).
 // correlation_id echoed back so cloud matches this status to its original request.
+// Must match the device's IAM policy (create_thing.py) and config.yaml's
+// topic_ota_status — this was hardcoded to "ota/<uin>/status", which the IAM
+// policy silently denies (visible only in CloudWatch, never in gateway logs).
+// Fourth instance of this exact topic-drift bug pattern in this project.
 
 void OtaAgent::report_status(const std::string& correlation_id, const OtaStatus& status)
 {
@@ -353,7 +357,7 @@ void OtaAgent::report_status(const std::string& correlation_id, const OtaStatus&
     j["error_msg"]      = status.error_msg;
     j["progress_pct"]   = status.progress_pct;
 
-    std::string topic = "ota/" + uin_ + "/status";
+    std::string topic = "sdv/ota/from/uin/" + uin_ + "/status";
 
     try {
         auto msg = mqtt::make_message(topic, j.dump(), QOS, false);

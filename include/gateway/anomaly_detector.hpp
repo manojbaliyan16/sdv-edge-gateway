@@ -14,7 +14,8 @@
 // ─── AnomalyDetector ──────────────────────────────────────────────────────────
 // Reads DecodedSignal telemetry from signal_queue_, runs each signal through a
 // pre-trained INT8 ONNX model (P1.2 + P1.3 integration), and publishes an alert
-// to "alerts/<uin>/anomaly" when the model's anomaly score exceeds the threshold.
+// to "sdv/Analytics/from/uin/<uin>/anomaly" when the model's anomaly score
+// exceeds the threshold.
 //
 // Thread model: one background thread (run()) drains signal_queue_ via pop_for(1s)
 // so stop() wakes within 1 second cleanly.
@@ -45,7 +46,7 @@ private:
     // ── Injected dependencies ─────────────────────────────────────────────────
     SafeQueue<DecodedSignal>&  signal_queue_;   // shared with TelemetryPublisher fan-out
     mqtt::async_client&        mqtt_client_;
-    std::string                uin_;            // topic: alerts/<uin>/anomaly
+    std::string                uin_;            // topic: sdv/Analytics/from/uin/<uin>/anomaly
 
     // ── Config ────────────────────────────────────────────────────────────────
     std::string                model_path_;         // path to .onnx file on Pi

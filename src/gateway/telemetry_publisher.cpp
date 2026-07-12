@@ -5,6 +5,20 @@
 
 DLT_DECLARE_CONTEXT(tp_ctx);
 
+// ─── Helper: GEAR_SHIFT raw code → label ──────────────────────────────────────
+// Matches the DBC encoding in dbc/toyota_corolla.dbc: SG_ GEAR_SHIFT (0=P,1=R,2=N,3=D)
+
+static std::string gear_code_to_string(double raw)
+{
+    switch (static_cast<int>(raw)) {
+        case 0:  return "P";
+        case 1:  return "R";
+        case 2:  return "N";
+        case 3:  return "D";
+        default: return "unknown";
+    }
+}
+
 // ─── Constructor ─────────────────────────────────────────────────────────────
 // mqtt_client_ has no default constructor — must be in initializer list
 // last_publish_ set to now() so first forced publish fires after PUBLISH_INTERVAL_S
@@ -94,8 +108,11 @@ void TelemetryPublisher::run()
 
         if (result) {
             // ── Accumulate into the right bucket ─────────────────────────────
-            if (result->name == "gear") {
-                gear_          = result->unit;   // gear stored as string in unit field
+            // GEAR_SHIFT decodes as a numeric DBC signal (0=P,1=R,2=N,3=D,4=unknown)
+            // like every other signal — DecodedSignal has no label field, so the
+            // raw code is mapped to a human-readable string here, not upstream.
+            if (result->name == "GEAR_SHIFT") {
+                gear_          = gear_code_to_string(result->value);
                 gear_received_ = true;
             } else {
                 numeric_[result->name] = result->value;
@@ -109,6 +126,16 @@ void TelemetryPublisher::run()
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                            now - last_publish_).count();
         bool timer_fired = (elapsed >= PUBLISH_INTERVAL_S);
+
+        // TEMPORARY 12-Jul-26: direct visibility into the publish decision —
+        // publish_now() has never been observed firing despite signals decoding
+        // correctly upstream; need to see these variables directly instead of
+        // reasoning about the code, since code-reading hasn't found the bug.
+        std::cerr << "[DEBUG] TelemetryPublisher::run — numeric_.size()=" << numeric_.size()
+                  << " gear_received_=" << gear_received_
+                  << " all_signals=" << all_signals
+                  << " elapsed=" << elapsed << "s"
+                  << " timer_fired=" << timer_fired << "\n";
 
         // Publish if all signals collected OR timer expired (and we have something)
         if (all_signals || (timer_fired && (!numeric_.empty() || gear_received_))) {
