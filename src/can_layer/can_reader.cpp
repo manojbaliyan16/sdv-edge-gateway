@@ -10,6 +10,8 @@
 #include <sys/ioctl.h>        // ioctl() — get interface index by name
 #include <unistd.h>           // close(), read()
 #include <cstring>            // memset(), strncpy()
+#include <cerrno>             // errno — distinguish real errors from EAGAIN timeout
+#include <iostream>           // std::cerr — temporary fallback while DLT delivery is unverified
 
 DLT_DECLARE_CONTEXT(can_reader_ctx);
 
@@ -121,12 +123,18 @@ void CanReader::run()
 
         if (nbytes < 0) {
             // EAGAIN / EWOULDBLOCK = timeout, no frame arrived — check running_ and loop
-            // Any other error = real problem — log and continue
+            // Any other error = real problem — was previously silently swallowed here.
+            if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                std::cerr << "[ERROR] CanReader::run — read() failed on "
+                          << interface_ << ": " << strerror(errno) << "\n";
+            }
             continue;
         }
 
         if (nbytes < static_cast<ssize_t>(sizeof(raw))) {
             // Incomplete frame — discard
+            std::cerr << "[WARN] CanReader::run — short read on " << interface_
+                      << ": got " << nbytes << " bytes, expected " << sizeof(raw) << "\n";
             continue;
         }
 
@@ -139,6 +147,12 @@ void CanReader::run()
 
         // ── Push into shared queue — signal_decoder will pop from here ────────
         queue_.push(frame);
+
+        // TEMPORARY 12-Jul-26: std::cerr fallback — DLT_LOG below has never shown
+        // up in journalctl despite the daemon confirming context registration,
+        // and this needs direct proof the read loop is actually receiving frames.
+        std::cerr << "[INFO] CanReader: frame received, id=" << frame.can_id
+                  << " dlc=" << static_cast<int>(frame.dlc) << "\n";
 
         DLT_LOG(can_reader_ctx, DLT_LOG_INFO,
                 DLT_STRING("CAN frame received, id:"),
