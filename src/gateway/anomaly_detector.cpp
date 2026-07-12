@@ -5,6 +5,7 @@
 
 #include <array>
 #include <stdexcept>
+#include <iostream>   // std::cerr — temporary fallback while DLT delivery is unverified (see start())
 
 DLT_DECLARE_CONTEXT(anomaly_ctx);
 
@@ -50,6 +51,12 @@ bool AnomalyDetector::start()
     } catch (const Ort::Exception& e) {
         DLT_LOG(anomaly_ctx, DLT_LOG_ERROR,
                 DLT_STRING("Failed to load ONNX model:"), DLT_STRING(e.what()));
+        // TEMPORARY 12-Jul-26: DLT delivery to the daemon is still unverified
+        // (FIFO /tmp/dlt has been failing to open all session), so the real
+        // reason for this failure was invisible. std::cerr guarantees we see
+        // it regardless of DLT's transport state. Remove once DLT is confirmed
+        // working end-to-end and this stops being the only way to see errors.
+        std::cerr << "[ERROR] AnomalyDetector: ONNX load failed: " << e.what() << "\n";
         return false;
     }
 
