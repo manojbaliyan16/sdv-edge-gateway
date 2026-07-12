@@ -11,7 +11,8 @@
 #include <unistd.h>           // close(), read()
 #include <cstring>            // memset(), strncpy()
 #include <cerrno>             // errno — distinguish real errors from EAGAIN timeout
-#include <iostream>           // std::cerr — temporary fallback while DLT delivery is unverified
+#include <sstream>            // std::ostringstream — build full lines before one atomic-ish write
+#include "common/debug_log.hpp"  // mutex-protected std::cerr — see header for why
 
 DLT_DECLARE_CONTEXT(can_reader_ctx);
 
@@ -125,16 +126,20 @@ void CanReader::run()
             // EAGAIN / EWOULDBLOCK = timeout, no frame arrived — check running_ and loop
             // Any other error = real problem — was previously silently swallowed here.
             if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                std::cerr << "[ERROR] CanReader::run — read() failed on "
-                          << interface_ << ": " << strerror(errno) << "\n";
+                std::ostringstream dbg;
+                dbg << "[ERROR] CanReader::run — read() failed on "
+                    << interface_ << ": " << strerror(errno) << "\n";
+                debug_log(dbg.str());
             }
             continue;
         }
 
         if (nbytes < static_cast<ssize_t>(sizeof(raw))) {
             // Incomplete frame — discard
-            std::cerr << "[WARN] CanReader::run — short read on " << interface_
-                      << ": got " << nbytes << " bytes, expected " << sizeof(raw) << "\n";
+            std::ostringstream dbg;
+            dbg << "[WARN] CanReader::run — short read on " << interface_
+                << ": got " << nbytes << " bytes, expected " << sizeof(raw) << "\n";
+            debug_log(dbg.str());
             continue;
         }
 
@@ -148,11 +153,9 @@ void CanReader::run()
         // ── Push into shared queue — signal_decoder will pop from here ────────
         queue_.push(frame);
 
-        // TEMPORARY 12-Jul-26: std::cerr fallback — DLT_LOG below has never shown
-        // up in journalctl despite the daemon confirming context registration,
-        // and this needs direct proof the read loop is actually receiving frames.
-        std::cerr << "[INFO] CanReader: frame received, id=" << frame.can_id
-                  << " dlc=" << static_cast<int>(frame.dlc) << "\n";
+        // (std::cerr per-frame print removed 12-Jul-26 — already proved this
+        // loop receives frames correctly; it was just adding noise/interleaving
+        // risk to the output of the modules downstream we're now debugging.)
 
         DLT_LOG(can_reader_ctx, DLT_LOG_INFO,
                 DLT_STRING("CAN frame received, id:"),

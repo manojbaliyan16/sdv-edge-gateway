@@ -1,7 +1,10 @@
 #include "gateway/telemetry_publisher.hpp"
 #include "common/dlt_wrapper.hpp"
+#include "common/timestamp.hpp"
 
 #include <nlohmann/json.hpp>   // JSON serialisation for TelemetryMsg
+#include <sstream>             // std::ostringstream — build full lines before one atomic-ish write
+#include "common/debug_log.hpp"  // mutex-protected std::cerr — see header for why
 
 DLT_DECLARE_CONTEXT(tp_ctx);
 
@@ -127,15 +130,21 @@ void TelemetryPublisher::run()
                            now - last_publish_).count();
         bool timer_fired = (elapsed >= PUBLISH_INTERVAL_S);
 
-        // TEMPORARY 12-Jul-26: direct visibility into the publish decision —
-        // publish_now() has never been observed firing despite signals decoding
-        // correctly upstream; need to see these variables directly instead of
-        // reasoning about the code, since code-reading hasn't found the bug.
-        std::cerr << "[DEBUG] TelemetryPublisher::run — numeric_.size()=" << numeric_.size()
-                  << " gear_received_=" << gear_received_
-                  << " all_signals=" << all_signals
-                  << " elapsed=" << elapsed << "s"
-                  << " timer_fired=" << timer_fired << "\n";
+        // TEMPORARY 12-Jul-26: direct visibility into the publish decision.
+        // Build the full line in one string first, then a SINGLE cerr write —
+        // three threads (CanReader, main's decode loop, this one) all write to
+        // std::cerr concurrently; chained << calls are NOT atomic and were
+        // getting sliced mid-line by other threads' output, producing garbled,
+        // untrustworthy readings (e.g. "elapsed= degC" instead of a number).
+        {
+            std::ostringstream dbg;
+            dbg << "[DEBUG] TelemetryPublisher::run — numeric_.size()=" << numeric_.size()
+                << " gear_received_=" << gear_received_
+                << " all_signals=" << all_signals
+                << " elapsed=" << elapsed << "s"
+                << " timer_fired=" << timer_fired << "\n";
+            debug_log(dbg.str());
+        }
 
         // Publish if all signals collected OR timer expired (and we have something)
         if (all_signals || (timer_fired && (!numeric_.empty() || gear_received_))) {
@@ -174,8 +183,11 @@ void TelemetryPublisher::publish_now()
     // ── Serialise to JSON ────────────────────────────────────────────────────
     nlohmann::json j;
     j["uin"]                   = msg.uin;
-    j["timestamp"]             = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                     msg.timestamp.time_since_epoch()).count();
+    // sdv_telemetry's DynamoDB sort key "timestamp" is type String (S) — this
+    // MUST be a JSON string, not epoch-millis as a number, or every PutItem
+    // fails a silent type-mismatch inside the IoT Rule engine (0 rows ever
+    // appear, nothing logged on the device side). See common/timestamp.hpp.
+    j["timestamp"]             = iso8601_utc(msg.timestamp);
     j["vehicle_speed_kmh"]     = msg.vehicle_speed_kmh;
     j["engine_rpm"]            = msg.engine_rpm;
     j["engine_coolant_temp_c"] = msg.engine_coolant_temp_c;
@@ -204,16 +216,22 @@ void TelemetryPublisher::publish_now()
         DLT_LOG(tp_ctx, DLT_LOG_INFO,
                 DLT_STRING("Telemetry published, speed:"),
                 DLT_STRING(std::to_string(msg.vehicle_speed_kmh).c_str()));
-        // TEMPORARY 12-Jul-26: std::cerr fallback, same reason as CanReader/main.
-        std::cerr << "[INFO] TelemetryPublisher: published to " << topic
-                  << " — speed=" << msg.vehicle_speed_kmh
-                  << " rpm=" << msg.engine_rpm
-                  << " coolant=" << msg.engine_coolant_temp_c
-                  << " battery=" << msg.battery_voltage_v << "\n";
+        // TEMPORARY 12-Jul-26: debug_log fallback, same reason as CanReader/main.
+        {
+            std::ostringstream dbg;
+            dbg << "[INFO] TelemetryPublisher: published to " << topic
+                << " — speed=" << msg.vehicle_speed_kmh
+                << " rpm=" << msg.engine_rpm
+                << " coolant=" << msg.engine_coolant_temp_c
+                << " battery=" << msg.battery_voltage_v << "\n";
+            debug_log(dbg.str());
+        }
     } catch (const mqtt::exception& e) {
         DLT_LOG(tp_ctx, DLT_LOG_ERROR,
                 DLT_STRING("MQTT publish failed:"), DLT_STRING(e.what()));
-        std::cerr << "[ERROR] TelemetryPublisher: MQTT publish failed: " << e.what() << "\n";
+        std::ostringstream dbg;
+        dbg << "[ERROR] TelemetryPublisher: MQTT publish failed: " << e.what() << "\n";
+        debug_log(dbg.str());
         // TODO: push to offline_buffer_ when MQTT disconnected
     }
 

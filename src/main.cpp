@@ -19,6 +19,7 @@
 #include <csignal>
 #include <atomic>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <chrono>
@@ -187,18 +188,10 @@ int main(int argc, char* argv[])
 
         const auto decoded = decoder.decode(*frame);
 
-        // TEMPORARY 12-Jul-26: std::cerr fallback, same reason as CanReader —
-        // need direct proof of what's being decoded while DLT delivery for
-        // high-frequency logs is unverified.
-        if (decoded.empty()) {
-            std::cerr << "[WARN] main: frame id=" << frame->can_id
-                      << " decoded to 0 signals (no matching SG_ in DBC?)\n";
-        } else {
-            for (const auto& sig : decoded) {
-                std::cerr << "[INFO] main: decoded " << sig.name
-                          << " = " << sig.value << " " << sig.unit << "\n";
-            }
-        }
+        // (per-signal std::cerr print removed 12-Jul-26 — already proved decode
+        // works correctly; silenced to reduce noise/interleaving risk while
+        // debugging TelemetryPublisher downstream. decoded.empty() case: no
+        // action needed either, same reasoning.)
 
         for (const auto& sig : decoded) {
             telemetry_q.push(sig);   // TelemetryPublisher consumer

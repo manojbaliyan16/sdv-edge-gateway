@@ -1,11 +1,12 @@
 #include "gateway/anomaly_detector.hpp"
 #include "common/dlt_wrapper.hpp"
+#include "common/timestamp.hpp"
 
 #include <nlohmann/json.hpp>
 
 #include <array>
 #include <stdexcept>
-#include <iostream>   // std::cerr — temporary fallback while DLT delivery is unverified (see start())
+#include "common/debug_log.hpp"  // mutex-protected std::cerr — see header for why
 
 DLT_DECLARE_CONTEXT(anomaly_ctx);
 
@@ -53,10 +54,10 @@ bool AnomalyDetector::start()
                 DLT_STRING("Failed to load ONNX model:"), DLT_STRING(e.what()));
         // TEMPORARY 12-Jul-26: DLT delivery to the daemon is still unverified
         // (FIFO /tmp/dlt has been failing to open all session), so the real
-        // reason for this failure was invisible. std::cerr guarantees we see
+        // reason for this failure was invisible. debug_log guarantees we see
         // it regardless of DLT's transport state. Remove once DLT is confirmed
         // working end-to-end and this stops being the only way to see errors.
-        std::cerr << "[ERROR] AnomalyDetector: ONNX load failed: " << e.what() << "\n";
+        debug_log(std::string("[ERROR] AnomalyDetector: ONNX load failed: ") + e.what() + "\n");
         return false;
     }
 
@@ -169,6 +170,11 @@ void AnomalyDetector::publish_alert(const DecodedSignal& signal, float score)
 
     nlohmann::json j;
     j["uin"]            = uin_;                 // required by diagnostic_agent.py
+    // sdv_anomalies' DynamoDB sort key "timestamp" is type String (S) and is a
+    // REQUIRED key attribute — this payload previously had no "timestamp" field
+    // at all, so every PutItem failed inside the IoT Rule engine (missing key
+    // element), silently, with 0 rows ever landing. See common/timestamp.hpp.
+    j["timestamp"]      = iso8601_utc(std::chrono::system_clock::now());
     j["signal_name"]    = signal.name;
     j["value"]          = signal.value;
     j["unit"]           = signal.unit;
