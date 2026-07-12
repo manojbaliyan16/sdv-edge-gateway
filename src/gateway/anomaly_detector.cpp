@@ -97,7 +97,7 @@ void AnomalyDetector::run()
 // Step D: pack signal fields into a float array
 // Step B: create MemoryInfo (tells ONNX "data is on CPU RAM")
 // Step E: wrap data as input Ort::Value (tensor)
-// Step A: session_->Run() → inference
+// Step A: s 
 // Step C: unpack score from output tensor → return
 //
 // Input shape: [1, 1] — batch=1, features=1 (physical_value from DecodedSignal.value)

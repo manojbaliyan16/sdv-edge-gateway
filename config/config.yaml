@@ -2,7 +2,7 @@
 # Loaded at runtime by main.cpp
 
 device:
-  uin: "VIN_PLACEHOLDER"           # Vehicle Identification Number — set per device
+  uin: "2T1BURHE0JC123456"           # Vehicle Identification Number — set per device
   region: "eu"
 
 can:
@@ -19,16 +19,16 @@ can:
     - GEAR_SHIFT
 
 mqtt:
-  broker: "YOUR_ENDPOINT.iot.eu-west-1.amazonaws.com"
+  broker: "a3tyi9klje90h2-ats.iot.eu-west-1.amazonaws.com"
   port: 8883
-  client_id: "sdv-gateway-VIN_PLACEHOLDER"
+  client_id: "sdv-gateway-2T1BURHE0JC123456"
   keep_alive_sec: 60
   # Topics — sdv/<channel>/from|to/uin/<UIN>
-  topic_telemetry_up:   "sdv/telemetry/from/uin/VIN_PLACEHOLDER"
-  topic_command_in:     "sdv/commands/to/uin/VIN_PLACEHOLDER"
-  topic_command_status: "sdv/commands/from/uin/VIN_PLACEHOLDER/status"
-  topic_ota_manifest:   "sdv/ota/to/uin/VIN_PLACEHOLDER/manifest"
-  topic_ota_status:     "sdv/ota/from/uin/VIN_PLACEHOLDER/status"
+  topic_telemetry_up:   "sdv/telemetry/from/uin/2T1BURHE0JC123456"
+  topic_command_in:     "sdv/commands/to/uin/2T1BURHE0JC123456"
+  topic_command_status: "sdv/commands/from/uin/2T1BURHE0JC123456/status"
+  topic_ota_manifest:   "sdv/ota/to/uin/2T1BURHE0JC123456/manifest"
+  topic_ota_status:     "sdv/ota/from/uin/2T1BURHE0JC123456/status"
 
 tls:
   ca_cert:     "certs/AmazonRootCA1.pem"
