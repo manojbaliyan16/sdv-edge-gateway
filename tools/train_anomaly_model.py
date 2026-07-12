@@ -68,6 +68,13 @@ SIGNAL_OPERATING_WINDOWS = {
     "ENGINE_RPM":          {"normal": (600.0, 6500.0), "anomaly_hi": 7500.0},
     "ENGINE_COOLANT_TEMP": {"normal": (60.0,  105.0),  "anomaly_hi": 130.0},
     "BATTERY_VOLTAGE":     {"normal": (11.5,  14.5),   "anomaly_lo": 9.0, "anomaly_hi": 16.0},
+    # DBC declares GEAR_SHIFT's valid enum domain as [0|4] — every declared gear
+    # position is equally "normal", so the normal band IS the full declared range.
+    # An anomaly here isn't a physically-extreme value like overspeed; it's a raw
+    # byte outside the declared enum (5-255) — a spoofed/corrupted gear code, i.e.
+    # a CAN injection indicator. See load_signal_bounds() for how headroom above
+    # 4 is derived (the declared DBC max can't provide it, since normal==declared).
+    "GEAR_SHIFT":          {"normal": (0.0, 4.0),       "anomaly_hi": 5.0},
 }
 
 
@@ -88,6 +95,14 @@ def load_signal_bounds(dbc_path: str) -> dict:
             if sig.name in SIGNAL_OPERATING_WINDOWS:
                 lo = float(sig.minimum) if sig.minimum is not None else 0.0
                 hi = float(sig.maximum) if sig.maximum is not None else 300.0
+                # cantools' sig.maximum reflects the DBC's declared valid-enum
+                # ceiling, not the physical wire capacity. For GEAR_SHIFT those are
+                # the same number (4), leaving zero headroom to synthesize an
+                # anomaly example above the normal band. The raw byte can still
+                # carry any value up to its bit width — use that as the ceiling
+                # instead so "spoofed/out-of-enum gear code" has room to exist.
+                if sig.name == "GEAR_SHIFT":
+                    hi = float((1 << sig.length) - 1) * sig.scale + sig.offset
                 bounds[sig.name] = (lo, hi)
                 print(f"  [DBC] {sig.name:28s}  range=[{lo:.1f}, {hi:.1f}]  unit='{sig.unit}'  factor={sig.scale}")
     return bounds
@@ -275,6 +290,9 @@ def sanity_check(output_path: str) -> None:
         ("anomaly  undervolt   5 V",     "BATTERY_VOLTAGE",       5.0,  ">0.5"),
         ("anomaly  over-rev  8000 rpm",  "ENGINE_RPM",          8000.0, ">0.5"),
         ("anomaly  overvolt  25 V",      "BATTERY_VOLTAGE",      25.0,  ">0.5"),
+        ("normal   gear      3 (D)",     "GEAR_SHIFT",            3.0,  "<0.5"),
+        ("normal   gear      0 (P)",     "GEAR_SHIFT",            0.0,  "<0.5"),
+        ("anomaly  gear code   7",       "GEAR_SHIFT",            7.0,  ">0.5"),
     ]
 
     print("\n  Sanity check:")

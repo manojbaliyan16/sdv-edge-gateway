@@ -144,6 +144,7 @@ float AnomalyDetector::run_inference(const DecodedSignal& signal)
         {"ENGINE_RPM",          {600.0f, 6500.0f}},
         {"ENGINE_COOLANT_TEMP", {60.0f,  105.0f}},
         {"BATTERY_VOLTAGE",     {11.5f,  14.5f}},
+        {"GEAR_SHIFT",          {0.0f,   4.0f}},
     };
 
     float raw = static_cast<float>(signal.value);
