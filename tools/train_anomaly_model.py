@@ -10,7 +10,12 @@ Data source: dbc/toyota_corolla.dbc (parsed via cantools).
   stay consistent with whatever the runtime decoder sees. No hardcoded ranges.
 
 Model I/O — must match anomaly_detector.cpp run_inference():
-  Input  "signal_features" : shape [1, 1], float32 — one decoded signal value
+  Input  "signal_features" : shape [1, 1], float32 — one signal value, min-max
+                              normalized against that signal's own
+                              SIGNAL_OPERATING_WINDOWS["normal"] band:
+                              normalized = (value - lo) / (hi - lo)
+                              (mirrored exactly in anomaly_detector.cpp's
+                              kNormalBounds — both sides must stay in sync)
   Output "anomaly_score"   : shape [1, 1], float32 — anomaly probability [0.0, 1.0]
 
 Interview talking point:
@@ -111,11 +116,14 @@ def generate_data(dbc_path: str, n_normal: int = 5000, n_anomaly: int = 1000):
 
     for sig_name, window in SIGNAL_OPERATING_WINDOWS.items():
         n_lo, n_hi = window["normal"]
+        band = n_hi - n_lo   # normalization: (value - n_lo) / band — must match
+                              # anomaly_detector.cpp's kNormalBounds exactly
 
-        # ── Normal band ───────────────────────────────────────────────────────
-        normal_parts.append(rng.uniform(n_lo, n_hi, per_signal_normal).astype(np.float32))
+        # ── Normal band (generated in physical units, then normalized) ─────────
+        normal_raw = rng.uniform(n_lo, n_hi, per_signal_normal).astype(np.float32)
+        normal_parts.append(((normal_raw - n_lo) / band).astype(np.float32))
 
-        # ── Anomaly bands ─────────────────────────────────────────────────────
+        # ── Anomaly bands (physical units, DBC-grounded ceiling) ───────────────
         # Use DBC max as upper ceiling for anomaly values
         dbc_lo, dbc_hi = dbc_bounds.get(sig_name, (0.0, n_hi * 2))
 
@@ -134,7 +142,8 @@ def generate_data(dbc_path: str, n_normal: int = 5000, n_anomaly: int = 1000):
             anom_parts.append(rng.uniform(anom_hi, min(dbc_hi, anom_hi * 1.5),
                                           per_signal_anomaly).astype(np.float32))
 
-        anomaly_parts.append(np.concatenate(anom_parts))
+        anomaly_raw = np.concatenate(anom_parts)
+        anomaly_parts.append(((anomaly_raw - n_lo) / band).astype(np.float32))
 
     normal_values  = np.concatenate(normal_parts)
     anomaly_values = np.concatenate(anomaly_parts)
@@ -251,21 +260,29 @@ def sanity_check(output_path: str) -> None:
 
     sess = ort.InferenceSession(output_path, providers=["CPUExecutionProvider"])
 
+    # (label, signal_name, raw_physical_value, expected)
+    # raw values are normalized below using the same SIGNAL_OPERATING_WINDOWS
+    # bounds the model was trained on — feeding raw physical values straight
+    # into the model here would silently mis-report every case, since the
+    # model now only understands normalized inputs.
     cases = [
-        ("normal   speed      60 km/h",  60.0,   "<0.5"),
-        ("normal   eng temp   90 degC",  90.0,   "<0.5"),
-        ("normal   battery  12.5 V",     12.5,   "<0.5"),
-        ("normal   rpm      2000 rpm",   2000.0, "<0.5"),
-        ("anomaly  overspeed 200 km/h",  200.0,  ">0.5"),
-        ("anomaly  overtemp  150 degC",  150.0,  ">0.5"),
-        ("anomaly  undervolt   5 V",       5.0,  ">0.5"),
-        ("anomaly  over-rev  8000 rpm",  8000.0, ">0.5"),
+        ("normal   speed      60 km/h",  "VEHICLE_SPEED",       60.0,   "<0.5"),
+        ("normal   eng temp   90 degC",  "ENGINE_COOLANT_TEMP", 90.0,   "<0.5"),
+        ("normal   battery  12.5 V",     "BATTERY_VOLTAGE",     12.5,   "<0.5"),
+        ("normal   rpm      2000 rpm",   "ENGINE_RPM",          2000.0, "<0.5"),
+        ("anomaly  overspeed 200 km/h",  "VEHICLE_SPEED",       200.0,  ">0.5"),
+        ("anomaly  overtemp  150 degC",  "ENGINE_COOLANT_TEMP", 150.0,  ">0.5"),
+        ("anomaly  undervolt   5 V",     "BATTERY_VOLTAGE",       5.0,  ">0.5"),
+        ("anomaly  over-rev  8000 rpm",  "ENGINE_RPM",          8000.0, ">0.5"),
+        ("anomaly  overvolt  25 V",      "BATTERY_VOLTAGE",      25.0,  ">0.5"),
     ]
 
     print("\n  Sanity check:")
     all_pass = True
-    for label, val, expected in cases:
-        inp   = np.array([[val]], dtype=np.float32)
+    for label, sig_name, val, expected in cases:
+        n_lo, n_hi = SIGNAL_OPERATING_WINDOWS[sig_name]["normal"]
+        normalized = (val - n_lo) / (n_hi - n_lo)
+        inp   = np.array([[normalized]], dtype=np.float32)
         score = sess.run(["anomaly_score"], {"signal_features": inp})[0][0][0]
         ok    = (score < 0.5) == (expected == "<0.5")
         sym   = "✓" if ok else "✗"

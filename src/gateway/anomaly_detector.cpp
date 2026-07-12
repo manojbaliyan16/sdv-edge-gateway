@@ -7,6 +7,8 @@
 #include <array>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_map>
+#include <utility>
 #include "common/debug_log.hpp"  // mutex-protected std::cerr — see header for why
 
 DLT_DECLARE_CONTEXT(anomaly_ctx);
@@ -110,23 +112,52 @@ void AnomalyDetector::run()
 }
 
 // ─── run_inference ────────────────────────────────────────────────────────────
-// Step D: pack signal fields into a float array
+// Step N: normalize the raw physical value against its own signal's normal band
+// Step D: pack the normalized value into a float array
 // Step B: create MemoryInfo (tells ONNX "data is on CPU RAM")
 // Step E: wrap data as input Ort::Value (tensor)
-// Step A: s 
+// Step A: run the model
 // Step C: unpack score from output tensor → return
 //
-// Input shape: [1, 1] — batch=1, features=1 (physical_value from DecodedSignal.value)
+// Input shape: [1, 1] — batch=1, features=1 (min-max normalized signal value)
 // Output shape: [1, 1] — batch=1, anomaly score in [0.0, 1.0]
 
 float AnomalyDetector::run_inference(const DecodedSignal& signal)
 {
-    // ── D: Pack signal fields into float array ────────────────────────────────
-    // DecodedSignal has one numeric field: value (physical value after DBC formula).
-    // Model input shape: [1, 1] — batch=1, features=1
-    std::array<float, 1> input_data = {
-        static_cast<float>(signal.value)
+    // ── N: Per-signal min-max normalization ───────────────────────────────────
+    // Raw physical values live on wildly different scales (RPM ~600-6500 vs
+    // battery ~11.5-14.5V). Feeding raw values into one shared model meant the
+    // network effectively learned "large absolute number = anomaly", which only
+    // worked for RPM by luck and never fired for speed/temp/battery — a real
+    // 25V battery-voltage anomaly injection (cansend can0 3B3#FA00000000000000,
+    // 12-Jul-26) scored 0.108, far under the 0.85 threshold, despite the value
+    // itself being nonsensical for a 12V vehicle battery.
+    //
+    // Normalizing each value against its own signal's normal band — see
+    // SIGNAL_OPERATING_WINDOWS["<signal>"]["normal"] in
+    // tools/train_anomaly_model.py, which this table must mirror exactly —
+    // puts every signal's normal case near [0,1] and its degree of anomaly in
+    // comparable, unit-free terms, so one shared model can generalize across
+    // all four signal types.
+    static const std::unordered_map<std::string, std::pair<float, float>> kNormalBounds = {
+        {"VEHICLE_SPEED",       {0.0f,   140.0f}},
+        {"ENGINE_RPM",          {600.0f, 6500.0f}},
+        {"ENGINE_COOLANT_TEMP", {60.0f,  105.0f}},
+        {"BATTERY_VOLTAGE",     {11.5f,  14.5f}},
     };
+
+    float raw = static_cast<float>(signal.value);
+    float normalized = raw;   // unknown signal name — pass raw value through
+    auto bounds_it = kNormalBounds.find(signal.name);
+    if (bounds_it != kNormalBounds.end()) {
+        float lo = bounds_it->second.first;
+        float hi = bounds_it->second.second;
+        normalized = (raw - lo) / (hi - lo);
+    }
+
+    // ── D: Pack normalized value into float array ─────────────────────────────
+    // Model input shape: [1, 1] — batch=1, features=1
+    std::array<float, 1> input_data = { normalized };
     std::array<int64_t, 2> input_shape = {1, 1};  // batch=1, features=1
 
     // ── B: MemoryInfo — tells ONNX where input data lives ────────────────────
