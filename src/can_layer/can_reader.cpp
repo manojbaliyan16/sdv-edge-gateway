@@ -30,6 +30,8 @@ CanReader::~CanReader()
 
 bool CanReader::start()
 {
+    DLT_REGISTER_CONTEXT(can_reader_ctx, "CANR", "CAN Reader - reads frames from CAN bus");
+
     socket_fd_ = open_socket();
     if (socket_fd_ < 0) {
         DLT_LOG(can_reader_ctx, DLT_LOG_ERROR,

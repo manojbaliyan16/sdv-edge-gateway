@@ -24,6 +24,8 @@ OfflineBuffer::~OfflineBuffer() {
 // ─── open() / close() ────────────────────────────────────────────────────────
 
 bool OfflineBuffer::open() {
+    DLT_REGISTER_CONTEXT(ctx_offline_buffer, "OFBF", "OfflineBuffer logs");
+
     // Step 1 — open (or create) the SQLite DB file at db_path_
     // SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE: create file if it doesn't exist
     int rc = sqlite3_open_v2(

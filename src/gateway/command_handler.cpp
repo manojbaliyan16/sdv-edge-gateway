@@ -32,6 +32,8 @@ CommandHandler::~CommandHandler()
 
 bool CommandHandler::start()
 {
+    DLT_REGISTER_CONTEXT(ch_ctx, "CMDH", "Command Handler - MQTT downlink");
+
     if (!mqtt_client_.is_connected()) {
         DLT_LOG(ch_ctx, DLT_LOG_ERROR,
                 DLT_STRING("CommandHandler::start — MQTT client not connected"));

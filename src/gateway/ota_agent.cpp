@@ -71,6 +71,8 @@ OtaAgent::~OtaAgent()
 
 bool OtaAgent::start()
 {
+    DLT_REGISTER_CONTEXT(ota_ctx, "OTAA", "OTA Agent - firmware download and flash");
+
     running_ = true;
     thread_  = std::thread(&OtaAgent::run, this);
     DLT_LOG(ota_ctx, DLT_LOG_INFO, DLT_STRING("OtaAgent started"));

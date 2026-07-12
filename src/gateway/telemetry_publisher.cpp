@@ -32,6 +32,8 @@ TelemetryPublisher::~TelemetryPublisher()
 
 bool TelemetryPublisher::start()
 {
+    DLT_REGISTER_CONTEXT(tp_ctx, "TELP", "Telemetry Publisher - MQTT uplink");
+
     // Connection lifecycle (connect/disconnect) now lives OUTSIDE this class —
     // main.cpp connects the shared mqtt_client_ ONCE, before starting both
     // TelemetryPublisher and CommandHandler on top of it (see command_handler.hpp).

@@ -41,6 +41,8 @@ CanWriter::~CanWriter()
 
 bool CanWriter::start()
 {
+    DLT_REGISTER_CONTEXT(can_writer_ctx, "CANW", "CAN Writer - writes frames to CAN bus");
+
     socket_fd_ = open_socket();
     if (socket_fd_ < 0) {
         DLT_LOG(can_writer_ctx, DLT_LOG_ERROR,

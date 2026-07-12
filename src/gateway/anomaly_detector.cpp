@@ -35,6 +35,8 @@ AnomalyDetector::~AnomalyDetector()
 
 bool AnomalyDetector::start()
 {
+    DLT_REGISTER_CONTEXT(anomaly_ctx, "ANOM", "Anomaly Detector - ONNX inference on CAN signals");
+
     try {
         Ort::SessionOptions opts;
         opts.SetIntraOpNumThreads(1);   // Pi has 4 cores; 1 thread avoids starving

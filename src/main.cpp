@@ -25,6 +25,7 @@
 
 #include "common/types.hpp"
 #include "common/safe_queue.hpp"
+#include "common/dlt_wrapper.hpp"
 #include "can_layer/can_reader.hpp"
 #include "can_layer/can_writer.hpp"
 #include "can_layer/signal_decoder.hpp"
@@ -48,6 +49,11 @@ static void signal_handler(int /*sig*/)
 
 int main(int argc, char* argv[])
 {
+    // Must run before ANY module's DLT_REGISTER_CONTEXT / DLT_LOG — real DLT
+    // requires the app to be registered with the daemon before any context
+    // under it can register or log. Everything else in main() runs after this.
+    DLT_REGISTER_APP("SDVG", "SDV Edge Gateway - Vehicle Telemetry and OTA");
+
     // ── 1. Load config ────────────────────────────────────────────────────────
     const std::string config_path = (argc > 1) ? argv[1] : "config/config.yaml";
 
@@ -207,5 +213,6 @@ int main(int argc, char* argv[])
     }
 
     std::cout << "[INFO] Gateway stopped cleanly.\n";
+    DLT_UNREGISTER_APP();
     return 0;
 }

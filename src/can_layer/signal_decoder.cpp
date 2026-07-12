@@ -10,6 +10,8 @@ DLT_DECLARE_CONTEXT(signal_decoder_ctx);
 bool SignalDecoder::load(const std::string& dbc_path,
                          const std::vector<std::string>& signal_names)
 {
+    DLT_REGISTER_CONTEXT(signal_decoder_ctx, "SDEC", "Signal Decoder - DBC parsing and CAN signal extraction");
+
     // ── 1. Open file ───────────────────────────────────────────────────────
     std::ifstream file(dbc_path);
     if (!file.is_open()) {
