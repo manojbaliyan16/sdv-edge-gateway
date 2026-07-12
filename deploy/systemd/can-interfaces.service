@@ -1,0 +1,23 @@
+[Unit]
+Description=Bring up CAN interfaces (can0, can1) at 500kbps
+After=network.target sys-subsystem-net-devices-can0.device sys-subsystem-net-devices-can1.device
+Requires=sys-subsystem-net-devices-can0.device sys-subsystem-net-devices-can1.device
+
+[Service]
+Type=oneshot
+# Interfaces must be taken down before bitrate can be (re)configured — the
+# mcp2515 dtoverlay can bring can0/can1 up automatically at boot without a
+# bitrate set, and `ip link set <iface> up type can bitrate ...` fails with
+# "RTNETLINK answers: Device or resource busy" if the interface is already
+# UP. down -> set bitrate -> up avoids that race. Confirmed working 12-Jul-26
+# after a power-trip reboot left both interfaces in this exact state.
+ExecStart=/usr/sbin/ip link set can0 down
+ExecStart=/usr/sbin/ip link set can0 type can bitrate 500000
+ExecStart=/usr/sbin/ip link set can0 up
+ExecStart=/usr/sbin/ip link set can1 down
+ExecStart=/usr/sbin/ip link set can1 type can bitrate 500000
+ExecStart=/usr/sbin/ip link set can1 up
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

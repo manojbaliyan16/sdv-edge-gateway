@@ -63,6 +63,15 @@ private:
 
     // ── Constants ────────────────────────────────────────────────────────────
     static constexpr int  PUBLISH_INTERVAL_S = 5;   // max wait before forced publish
-    static constexpr int  QOS               = 2;    // exactly-once for telemetry
+    // AWS IoT Core's message broker does not support MQTT QoS 2 — it only
+    // implements QoS 0 and QoS 1. A QoS 2 PUBLISH causes AWS IoT to terminate
+    // the connection rather than complete the 4-way handshake; with
+    // automatic_reconnect masking the drop, mqtt_client_.publish(...)->wait()
+    // in publish_now() blocked forever on a PUBREC/PUBCOMP that would never
+    // arrive — the publisher thread hung solid on its first real publish,
+    // silently, with no exception and no further log output. QoS 1
+    // (at-least-once) is the strongest delivery guarantee AWS IoT actually
+    // offers, and matches every other publisher in this project.
+    static constexpr int  QOS               = 1;
     static constexpr auto QUEUE_TIMEOUT     = std::chrono::seconds(1); // pop_for duration
 };
