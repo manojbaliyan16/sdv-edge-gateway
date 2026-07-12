@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-send_command.py — Publish remote ops commands or OTA manifests to a vehicle via AWS IoT Core.
+send_command.py — Publish remote ops commands to a vehicle via AWS IoT Core.
 
-This closes the DOWNLINK path:
+Closes the DOWNLINK path:
   Cloud Operator (this script)
         │
         └── boto3 iot-data publish()
@@ -10,51 +10,68 @@ This closes the DOWNLINK path:
               ▼
         AWS IoT Core (routes by topic ACL per UIN)
               │
-              ├── sdv/commands/to/uin/<UIN>         → CommandHandler.cpp → CanWriter
-              └── sdv/ota/to/uin/<UIN>/manifest     → OtaAgent.cpp → HTTPS download → A/B flash
+              └── sdv/commands/to/uin/<UIN>  → CommandHandler.cpp
+                    ├── DOOR_LOCK/DOOR_UNLOCK/ENGINE_START/HORN_LIGHT → CanWriter
+                    └── OTA_TRIGGER                                   → OtaAgent (ota_queue_)
 
-Vehicle-side command payload format (CommandHandler.cpp expects):
+Wire format (must match CommandHandler::parse_command, command_handler.cpp:145-171):
   {
-    "cmd_id":   "<unique ID for dedup — use UUID>",
-    "cmd_type": "CAN_WRITE" | "OTA_UPDATE" | "DIAGNOSTIC_QUERY",
-    "can_id":   <hex int>    (only for CAN_WRITE),
-    "data":     "<hex bytes>" (only for CAN_WRITE, max 8 bytes),
-    "priority": 0-255        (optional, lower = higher priority)
+    "type":           "DOOR_LOCK" | "DOOR_UNLOCK" | "ENGINE_START" | "HORN_LIGHT" | "OTA_TRIGGER",
+    "correlation_id":  "<uuid4>",
+    "payload":         {}            # actuation commands — CanWriter ignores this entirely
   }
 
-OTA manifest format (OtaAgent.cpp expects):
+For OTA_TRIGGER, "payload" carries the manifest — these are the ONLY three
+keys OtaAgent::run() reads out of payload_json (ota_agent.cpp:108-116):
   {
-    "version":       "<semver>",
-    "url":           "https://<s3-presigned-or-cdn-url>/firmware.bin",
-    "sha256":        "<64-char hex digest>",
-    "signature":     "<ECDSA base64 signature of sha256>",
-    "size_bytes":    <int>,
-    "min_battery_v": 11.5,
-    "require_stop":  true
+    "type": "OTA_TRIGGER",
+    "correlation_id": "<uuid4>",
+    "payload": {
+      "url":     "https://<s3-presigned-or-cdn-url>/firmware.bin",
+      "sha256":  "<64-char hex digest>",
+      "version": "<semver, optional — defaults to \"unknown\" on the vehicle>"
+    }
   }
+
+NOTE: there is no separate OTA manifest topic. An earlier version of this
+script published OTA manifests to sdv/ota/to/uin/<UIN>/manifest — nothing in
+the C++ ever subscribed to that topic (CommandHandler only subscribes to
+sdv/commands/to/uin/<uin> and the diagnosis topic; OtaAgent never subscribes
+to MQTT at all, only publishes status). Every OTA manifest sent that way was
+silently lost. OTA now goes through the same command topic as everything
+else, as an OTA_TRIGGER.
+
+NOTE: CAN_WRITE and DIAGNOSTIC_QUERY do not exist as vehicle-side commands.
+CanWriter can only send one fixed trigger byte to one of four fixed CAN IDs
+per named command (can_writer.cpp) — it cannot write an arbitrary CAN ID +
+data payload. DIAGNOSTIC_QUERY has no CommandType value and no handler at
+all. Diagnosis is push-based instead: AnomalyDetector -> Lambda ->
+sdv/Analytics/to/uin/<uin>/diagnosis -> CommandHandler::handle_diagnosis()
+(already working, logs DTC/ASIL/driver_message).
+
+NOTE: actuation commands have no status feedback topic. CanWriter::write()
+returns a bool that's only logged locally via DLT on the vehicle — there is
+nothing to subscribe to for DOOR_LOCK/etc. acknowledgement. OTA is the only
+command type with real status feedback (sdv/ota/from/uin/<uin>/status,
+published by OtaAgent::report_status()).
 
 Usage:
-  # Send a CAN_WRITE command (e.g. activate hazard lights — CAN ID 0x3A0, byte 0 bit 0)
+  # Lock the doors
   python3 cloud/iot_setup/send_command.py \\
-    --uin VIN_PLACEHOLDER --region eu-west-1 \\
-    --cmd-type CAN_WRITE --can-id 0x3A0 --data DEADBEEF00000000
+    --uin VIN_PLACEHOLDER --region eu-west-1 --cmd-type DOOR_LOCK
 
-  # Send a diagnostic query (no actuation — just request a DTC snapshot)
+  # Start the engine
   python3 cloud/iot_setup/send_command.py \\
-    --uin VIN_PLACEHOLDER --region eu-west-1 \\
-    --cmd-type DIAGNOSTIC_QUERY
+    --uin VIN_PLACEHOLDER --region eu-west-1 --cmd-type ENGINE_START
 
-  # Send an OTA manifest
+  # Trigger an OTA update
   python3 cloud/iot_setup/send_command.py \\
-    --uin VIN_PLACEHOLDER --region eu-west-1 \\
-    --cmd-type OTA_UPDATE \\
+    --uin VIN_PLACEHOLDER --region eu-west-1 --cmd-type OTA_TRIGGER \\
     --ota-url https://s3.eu-west-1.amazonaws.com/my-bucket/fw_v1.2.0.bin \\
-    --ota-sha256 abc123... \\
-    --ota-sig base64sig... \\
-    --ota-version 1.2.0
+    --ota-sha256 abc123... --ota-version 1.2.0
 
-  # Monitor vehicle responses in real time (separate terminal):
-  aws iot-data subscribe --topic "sdv/commands/from/uin/VIN_PLACEHOLDER/status"
+  # Monitor OTA progress (separate terminal) — actuation commands have no
+  # equivalent status topic, see NOTE above.
   aws iot-data subscribe --topic "sdv/ota/from/uin/VIN_PLACEHOLDER/status"
 """
 
@@ -62,134 +79,85 @@ import argparse
 import boto3
 import json
 import uuid
-from datetime import datetime
 
-# ─── Command types (must match command_handler.cpp enum) ──────────────────────
-CMD_CAN_WRITE        = "CAN_WRITE"
-CMD_OTA_UPDATE       = "OTA_UPDATE"
-CMD_DIAGNOSTIC_QUERY = "DIAGNOSTIC_QUERY"
+# ─── Command types (must match command_handler.cpp's type_map exactly) ────────
+ACTUATION_TYPES = ["DOOR_LOCK", "DOOR_UNLOCK", "ENGINE_START", "HORN_LIGHT"]
+CMD_TYPES = ACTUATION_TYPES + ["OTA_TRIGGER"]
+
+COMMAND_TOPIC = "sdv/commands/to/uin/{uin}"
 
 
-def build_can_command(cmd_id: str, can_id_hex: str, data_hex: str, priority: int = 128) -> dict:
+def build_actuation_command(cmd_type: str, correlation_id: str) -> dict:
     """
-    Build a CAN_WRITE command payload.
-    can_id_hex: e.g. "0x3A0" or "3A0"
-    data_hex:   e.g. "DEADBEEF00000000" (up to 16 hex chars = 8 bytes)
+    Build a DOOR_LOCK/DOOR_UNLOCK/ENGINE_START/HORN_LIGHT command.
+    payload is empty — CanWriter::write() ignores it; the CAN ID and the
+    single trigger byte are both fixed on the vehicle side per cmd_type.
     """
-    # Validate
-    can_id = int(can_id_hex, 16)
-    data_bytes = bytes.fromhex(data_hex.replace("0x", "").replace("0X", ""))
-    if len(data_bytes) > 8:
-        raise ValueError(f"CAN data too long: {len(data_bytes)} bytes (max 8)")
-
     return {
-        "cmd_id":    cmd_id,
-        "cmd_type":  CMD_CAN_WRITE,
-        "can_id":    can_id,
-        "data":      data_hex.upper()[:16].zfill(16),   # always 8 bytes, zero-padded
-        "priority":  priority,
-        "timestamp": datetime.utcnow().isoformat(),
+        "type": cmd_type,
+        "correlation_id": correlation_id,
+        "payload": {},
     }
 
 
-def build_diagnostic_query(cmd_id: str) -> dict:
+def build_ota_command(correlation_id: str, url: str, sha256: str, version: str) -> dict:
     """
-    Build a DIAGNOSTIC_QUERY command.
-    Vehicle responds with current DTC snapshot on status topic.
-    """
-    return {
-        "cmd_id":    cmd_id,
-        "cmd_type":  CMD_DIAGNOSTIC_QUERY,
-        "timestamp": datetime.utcnow().isoformat(),
-    }
-
-
-def build_ota_manifest(version: str, url: str, sha256: str,
-                        signature: str, size_bytes: int) -> dict:
-    """
-    Build OTA manifest. Published to sdv/ota/to/uin/<UIN>/manifest.
-    OtaAgent.cpp downloads firmware, verifies SHA256 and ECDSA sig, A/B flashes.
-    Preconditions enforced on-device: vehicle must be stopped, battery ≥ 11.5V.
+    Build an OTA_TRIGGER command. payload carries exactly the 3 fields
+    OtaAgent::run() reads (ota_agent.cpp:108-116) — url, sha256, version.
     """
     return {
-        "version":       version,
-        "url":           url,
-        "sha256":        sha256,
-        "signature":     signature,
-        "size_bytes":    size_bytes,
-        "min_battery_v": 11.5,
-        "require_stop":  True,   # OtaAgent enforces this — ASIL-C requirement
-        "timestamp":     datetime.utcnow().isoformat(),
+        "type": "OTA_TRIGGER",
+        "correlation_id": correlation_id,
+        "payload": {
+            "url": url,
+            "sha256": sha256,
+            "version": version,
+        },
     }
 
 
 def publish_to_iot(region: str, topic: str, payload: dict, qos: int = 1):
-    """Publish payload to AWS IoT Core data plane. Uses device-side endpoint."""
+    """Publish payload to AWS IoT Core data plane."""
     iot = boto3.client("iot-data", region_name=region)
-    resp = iot.publish(
-        topic=topic,
-        qos=qos,
-        payload=json.dumps(payload),
-    )
-    return resp
+    return iot.publish(topic=topic, qos=qos, payload=json.dumps(payload))
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Send remote ops command or OTA manifest to a vehicle via AWS IoT Core"
+        description="Send a remote ops command to a vehicle via AWS IoT Core"
     )
-    parser.add_argument("--uin",      required=True, help="Vehicle UIN / VIN")
-    parser.add_argument("--region",   default="eu-west-1")
-    parser.add_argument("--cmd-type", required=True,
-                        choices=[CMD_CAN_WRITE, CMD_OTA_UPDATE, CMD_DIAGNOSTIC_QUERY])
+    parser.add_argument("--uin", required=True, help="Vehicle UIN / VIN")
+    parser.add_argument("--region", default="eu-west-1")
+    parser.add_argument("--cmd-type", required=True, choices=CMD_TYPES)
 
-    # CAN_WRITE args
-    parser.add_argument("--can-id",  default="0x3A0", help="CAN ID hex (for CAN_WRITE)")
-    parser.add_argument("--data",    default="0000000000000000",
-                        help="8-byte hex payload (for CAN_WRITE)")
-    parser.add_argument("--priority", type=int, default=128)
-
-    # OTA_UPDATE args
-    parser.add_argument("--ota-url",     default="", help="HTTPS URL for firmware binary")
-    parser.add_argument("--ota-sha256",  default="", help="64-char hex SHA256 of binary")
-    parser.add_argument("--ota-sig",     default="", help="Base64 ECDSA signature")
-    parser.add_argument("--ota-version", default="1.0.0")
-    parser.add_argument("--ota-size",    type=int, default=0)
+    # OTA_TRIGGER args
+    parser.add_argument("--ota-url", default="", help="HTTPS URL for firmware binary")
+    parser.add_argument("--ota-sha256", default="", help="64-char hex SHA256 of binary")
+    parser.add_argument("--ota-version", default="unknown")
 
     args = parser.parse_args()
+    correlation_id = str(uuid.uuid4())
 
-    cmd_id = str(uuid.uuid4())
+    if args.cmd_type == "OTA_TRIGGER":
+        if not args.ota_url or not args.ota_sha256:
+            parser.error("OTA_TRIGGER requires --ota-url and --ota-sha256")
+        payload = build_ota_command(correlation_id, args.ota_url, args.ota_sha256, args.ota_version)
+    else:
+        payload = build_actuation_command(args.cmd_type, correlation_id)
 
-    # ── Build payload based on command type ──────────────────────────────────
-    if args.cmd_type == CMD_CAN_WRITE:
-        payload = build_can_command(cmd_id, args.can_id, args.data, args.priority)
-        topic   = f"sdv/commands/to/uin/{args.uin}"
+    topic = COMMAND_TOPIC.format(uin=args.uin)
 
-    elif args.cmd_type == CMD_DIAGNOSTIC_QUERY:
-        payload = build_diagnostic_query(cmd_id)
-        topic   = f"sdv/commands/to/uin/{args.uin}"
-
-    elif args.cmd_type == CMD_OTA_UPDATE:
-        if not args.ota_url or not args.ota_sha256 or not args.ota_sig:
-            parser.error("OTA_UPDATE requires --ota-url, --ota-sha256, --ota-sig")
-        payload = build_ota_manifest(
-            args.ota_version, args.ota_url, args.ota_sha256,
-            args.ota_sig, args.ota_size
-        )
-        topic = f"sdv/ota/to/uin/{args.uin}/manifest"
-
-    # ── Publish ──────────────────────────────────────────────────────────────
     print(f"\n→ Publishing to: {topic}")
     print(f"  Payload:\n{json.dumps(payload, indent=4)}\n")
 
     try:
         publish_to_iot(args.region, topic, payload)
-        print(f"✓ Published successfully (cmd_id={cmd_id})")
-        print(f"\nMonitor vehicle response:")
-        if args.cmd_type == CMD_OTA_UPDATE:
+        print(f"✓ Published successfully (correlation_id={correlation_id})")
+        if args.cmd_type == "OTA_TRIGGER":
+            print(f"\nMonitor OTA progress:")
             print(f"  aws iot-data subscribe --topic \"sdv/ota/from/uin/{args.uin}/status\"")
         else:
-            print(f"  aws iot-data subscribe --topic \"sdv/commands/from/uin/{args.uin}/status\"")
+            print(f"\n(No status topic exists for actuation commands — see module docstring.)")
     except Exception as e:
         print(f"✗ Publish failed: {e}")
         raise
