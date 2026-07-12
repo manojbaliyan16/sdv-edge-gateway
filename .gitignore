@@ -67,3 +67,9 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Secrets — device private key, cert, AWS root CA. Never commit these to a public repo.
+certs/*.pem
+certs/*.crt
+certs/*.key
+!certs/.gitkeep

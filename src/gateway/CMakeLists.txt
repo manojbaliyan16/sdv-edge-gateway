@@ -26,7 +26,8 @@ target_link_libraries(gateway PRIVATE
     Threads::Threads        # std::thread in publisher/handler/ota loops
 )
 
-# Link real DLT on Pi only
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+# Link real DLT on Pi only, and only if automotive-dlt was actually found —
+# otherwise this target doesn't exist and the link step would fail outright.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET automotive-dlt)
     target_link_libraries(gateway PRIVATE automotive-dlt)
 endif()

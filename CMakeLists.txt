@@ -13,10 +13,20 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)     # default to optimised build on Pi
 endif()
 
-# ─── DLT — enabled on Linux (Pi target) only ──────────────────────────────────
+# ─── DLT — enabled on Linux (Pi target) only, AND only if actually found ──────
+# Real COVESA dlt-daemon isn't apt-installable under this name — needs a from-source
+# build. Rather than hard-require it, fall back to the no-op stubs (same as Mac)
+# when it's not present, so the Pi build isn't blocked on a separate library build.
+# Follow-up (deferred, not blocking P2.3): build+install COVESA dlt-daemon for real
+# structured logging on the Pi.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    add_compile_definitions(USE_DLT)
-    find_package(automotive-dlt QUIET)   # QUIET — don't error if not found on cross-compile host
+    find_package(automotive-dlt QUIET)   # QUIET — don't error if not found
+    if(automotive-dlt_FOUND)
+        add_compile_definitions(USE_DLT)
+        message(STATUS "automotive-dlt found — real DLT logging enabled")
+    else()
+        message(STATUS "automotive-dlt NOT found — using no-op DLT stubs (same as Mac build)")
+    endif()
 endif()
 
 # ─── Dependencies ─────────────────────────────────────────────────────────────
