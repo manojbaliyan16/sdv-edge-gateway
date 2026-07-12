@@ -26,8 +26,14 @@ target_link_libraries(gateway PRIVATE
     Threads::Threads        # std::thread in publisher/handler/ota loops
 )
 
-# Link real DLT on Pi only, and only if automotive-dlt was actually found —
-# otherwise this target doesn't exist and the link step would fail outright.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET automotive-dlt)
+# Link real DLT on Pi only, and only if automotive-dlt was actually found.
+# NOTE 12-Jul-26: originally gated on `TARGET automotive-dlt`, which on the Pi
+# evaluated true even though find_package (root CMakeLists.txt) reported NOT
+# FOUND for the same package in the same configure run — never fully root-caused
+# (suspected CMake package-registry or TARGET-detection quirk on that toolchain),
+# not worth burning more time on today. Switched to gate on automotive-dlt_FOUND
+# directly, since that's the exact boolean find_package sets and root CMakeLists.txt
+# already trusts it for the same decision — same variable, one source of truth.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND automotive-dlt_FOUND)
     target_link_libraries(gateway PRIVATE automotive-dlt)
 endif()

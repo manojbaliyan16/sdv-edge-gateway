@@ -29,6 +29,7 @@
     #define DLT_STRING(x)               x
     #define DLT_INT(x)                  x
     #define DLT_UINT(x)                 x
+    #define DLT_FLOAT32(x)              x
     #define DLT_FLOAT64(x)              x
 
     #define DLT_DECLARE_CONTEXT(ctx)

@@ -82,11 +82,11 @@ void AnomalyDetector::run()
 
         DLT_LOG(anomaly_ctx, DLT_LOG_VERBOSE,
                 DLT_STRING("signal:"), DLT_STRING(signal.name.c_str()),
-                DLT_STRING("score:"), DLT_FLOAT(score));
+                DLT_STRING("score:"), DLT_FLOAT32(score));
 
         if (score > anomaly_threshold_) {
             DLT_LOG(anomaly_ctx, DLT_LOG_WARN,
-                    DLT_STRING("ANOMALY detected — score:"), DLT_FLOAT(score),
+                    DLT_STRING("ANOMALY detected — score:"), DLT_FLOAT32(score),
                     DLT_STRING("signal:"), DLT_STRING(signal.name.c_str()));
             publish_alert(signal, score);
         }
