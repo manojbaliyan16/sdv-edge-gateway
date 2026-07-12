@@ -187,6 +187,19 @@ int main(int argc, char* argv[])
 
         const auto decoded = decoder.decode(*frame);
 
+        // TEMPORARY 12-Jul-26: std::cerr fallback, same reason as CanReader —
+        // need direct proof of what's being decoded while DLT delivery for
+        // high-frequency logs is unverified.
+        if (decoded.empty()) {
+            std::cerr << "[WARN] main: frame id=" << frame->can_id
+                      << " decoded to 0 signals (no matching SG_ in DBC?)\n";
+        } else {
+            for (const auto& sig : decoded) {
+                std::cerr << "[INFO] main: decoded " << sig.name
+                          << " = " << sig.value << " " << sig.unit << "\n";
+            }
+        }
+
         for (const auto& sig : decoded) {
             telemetry_q.push(sig);   // TelemetryPublisher consumer
             anomaly_q.push(sig);     // AnomalyDetector consumer

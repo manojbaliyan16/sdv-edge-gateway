@@ -171,9 +171,16 @@ void TelemetryPublisher::publish_now()
         DLT_LOG(tp_ctx, DLT_LOG_INFO,
                 DLT_STRING("Telemetry published, speed:"),
                 DLT_STRING(std::to_string(msg.vehicle_speed_kmh).c_str()));
+        // TEMPORARY 12-Jul-26: std::cerr fallback, same reason as CanReader/main.
+        std::cerr << "[INFO] TelemetryPublisher: published to " << topic
+                  << " — speed=" << msg.vehicle_speed_kmh
+                  << " rpm=" << msg.engine_rpm
+                  << " coolant=" << msg.engine_coolant_temp_c
+                  << " battery=" << msg.battery_voltage_v << "\n";
     } catch (const mqtt::exception& e) {
         DLT_LOG(tp_ctx, DLT_LOG_ERROR,
                 DLT_STRING("MQTT publish failed:"), DLT_STRING(e.what()));
+        std::cerr << "[ERROR] TelemetryPublisher: MQTT publish failed: " << e.what() << "\n";
         // TODO: push to offline_buffer_ when MQTT disconnected
     }
 
