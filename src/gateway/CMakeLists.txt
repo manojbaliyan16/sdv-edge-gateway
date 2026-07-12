@@ -12,6 +12,7 @@ target_include_directories(gateway
     PRIVATE ${PAHO_INCLUDE}              # mqtt/ — telemetry_publisher.cpp + command_handler.cpp
     PRIVATE ${CMAKE_SOURCE_DIR}/include/third_party  # rapidjson — internal to gateway only
     PRIVATE ${ONNXRUNTIME_INCLUDE}                  # onnxruntime_cxx_api.h — anomaly_detector.cpp
+    PRIVATE ${DLT_INCLUDE}                          # dlt/dlt.h — real DLT on Linux only, empty var on Mac
 )
 
 target_link_libraries(gateway PRIVATE
@@ -26,14 +27,9 @@ target_link_libraries(gateway PRIVATE
     Threads::Threads        # std::thread in publisher/handler/ota loops
 )
 
-# Link real DLT on Pi only, and only if automotive-dlt was actually found.
-# NOTE 12-Jul-26: originally gated on `TARGET automotive-dlt`, which on the Pi
-# evaluated true even though find_package (root CMakeLists.txt) reported NOT
-# FOUND for the same package in the same configure run — never fully root-caused
-# (suspected CMake package-registry or TARGET-detection quirk on that toolchain),
-# not worth burning more time on today. Switched to gate on automotive-dlt_FOUND
-# directly, since that's the exact boolean find_package sets and root CMakeLists.txt
-# already trusts it for the same decision — same variable, one source of truth.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND automotive-dlt_FOUND)
-    target_link_libraries(gateway PRIVATE automotive-dlt)
+# Link real DLT on Pi only, and only if it was actually found (root CMakeLists.txt
+# sets DLT_LIB via find_library against the real libdlt.so — see note there about
+# why find_package(automotive-dlt) was abandoned).
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND DLT_LIB)
+    target_link_libraries(gateway PRIVATE ${DLT_LIB})
 endif()

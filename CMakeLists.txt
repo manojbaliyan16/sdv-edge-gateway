@@ -14,18 +14,24 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # ─── DLT — enabled on Linux (Pi target) only, AND only if actually found ──────
-# Real COVESA dlt-daemon isn't apt-installable under this name — needs a from-source
-# build. Rather than hard-require it, fall back to the no-op stubs (same as Mac)
-# when it's not present, so the Pi build isn't blocked on a separate library build.
-# Follow-up (deferred, not blocking P2.3): build+install COVESA dlt-daemon for real
-# structured logging on the Pi.
+# Installed via: sudo apt install libdlt-dev dlt-daemon  (Debian/Raspberry Pi OS trixie).
+#
+# NOTE 12-Jul-26: originally used find_package(automotive-dlt), matching Debian's
+# package name for the CMake config it ships (automotive-dlt-config.cmake). That
+# config is broken — its exported target resolves to a literal "-lautomotive-dlt"
+# link flag, but the file Debian actually installs is libdlt.so (confirmed via
+# `dpkg -L libdlt-dev`). No amount of correct CMakeLists.txt guard logic works
+# around an upstream packaging bug in the .cmake file itself. Switched to manual
+# find_library/find_path against the real filenames — same pattern already used
+# below for SQLite3/Paho/ONNX Runtime, all of which also lack usable CMake configs.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    find_package(automotive-dlt QUIET)   # QUIET — don't error if not found
-    if(automotive-dlt_FOUND)
+    find_library(DLT_LIB     dlt)               # finds libdlt.so — NOT REQUIRED, fall back to stubs
+    find_path   (DLT_INCLUDE dlt/dlt.h)          # finds folder containing dlt/
+    if(DLT_LIB AND DLT_INCLUDE)
         add_compile_definitions(USE_DLT)
-        message(STATUS "automotive-dlt found — real DLT logging enabled")
+        message(STATUS "DLT found (${DLT_LIB}) — real DLT logging enabled")
     else()
-        message(STATUS "automotive-dlt NOT found — using no-op DLT stubs (same as Mac build)")
+        message(STATUS "DLT NOT found — using no-op DLT stubs (same as Mac build)")
     endif()
 endif()
 
