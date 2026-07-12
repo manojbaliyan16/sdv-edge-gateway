@@ -33,6 +33,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+import onnx
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -226,6 +227,18 @@ def export_onnx(model: nn.Module, output_path: str) -> None:
         opset_version=17,
         do_constant_folding=True,           # fold BatchNorm stats into graph
     )
+
+    # Collapse to a single self-contained file. Some PyTorch versions default to
+    # ONNX's "external data" format (weights split into a companion <name>.onnx.data
+    # file) even for models this tiny, where it's unnecessary — that format exists
+    # to work around protobuf's 2GB message limit. Reload with external data merged
+    # back in, then re-save as one file, so a deploy is a single scp, not two.
+    model_proto = onnx.load(output_path, load_external_data=True)
+    onnx.save_model(model_proto, output_path, save_as_external_data=False)
+    external_data_path = output_path + ".data"
+    if os.path.exists(external_data_path):
+        os.remove(external_data_path)
+
     print(f"  exported → {output_path}")
 
 

@@ -155,7 +155,14 @@ void TelemetryPublisher::publish_now()
     // ── Publish to MQTT ──────────────────────────────────────────────────────
     // Topic: telemetry/<uin>/data  (vehicle→cloud direction)
     // QoS 2: exactly-once — no duplicate telemetry records in DynamoDB
-    std::string topic = "telemetry/" + uin_ + "/data";
+    // Must match the IoT Rule's SQL topic filter in create_infrastructure.py
+    // ("FROM 'sdv/telemetry/from/uin/+'") and config.yaml's topic_telemetry_up —
+    // this was hardcoded to a different, unrelated topic ("telemetry/<uin>/data")
+    // that matched nothing, so publishes silently never reached DynamoDB. Third
+    // instance of this exact bug pattern in this project (see IAM policy fix,
+    // command_handler fix) — topic strings keep drifting because they're
+    // duplicated across files instead of defined once.
+    std::string topic = "sdv/telemetry/from/uin/" + uin_;
 
     try {
         auto pub_msg = mqtt::make_message(topic, payload, QOS, false);
