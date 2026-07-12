@@ -127,14 +127,20 @@ void TelemetryPublisher::publish_now()
     TelemetryMsg msg;
     msg.uin                    = uin_;
     msg.timestamp              = std::chrono::system_clock::now();
-    msg.vehicle_speed_kmh      = numeric_.count("vehicle_speed_kmh")
-                                     ? numeric_.at("vehicle_speed_kmh") : 0.0;
-    msg.engine_rpm             = numeric_.count("engine_rpm")
-                                     ? numeric_.at("engine_rpm")         : 0.0;
-    msg.engine_coolant_temp_c  = numeric_.count("engine_coolant_temp_c")
-                                     ? numeric_.at("engine_coolant_temp_c") : 0.0;
-    msg.battery_voltage_v      = numeric_.count("battery_voltage_v")
-                                     ? numeric_.at("battery_voltage_v")  : 0.0;
+    // Keys here MUST match the exact signal names SignalDecoder emits, which
+    // are the DBC's own SG_ names verbatim (e.g. "VEHICLE_SPEED", all-caps) —
+    // NOT the snake_case TelemetryMsg/JSON field names. This was previously
+    // looking up "vehicle_speed_kmh" etc., which never matched anything
+    // numeric_ actually contained, so every field silently published as 0.0
+    // (count()-before-at() made it defensive, not crashing, just wrong).
+    msg.vehicle_speed_kmh      = numeric_.count("VEHICLE_SPEED")
+                                     ? numeric_.at("VEHICLE_SPEED") : 0.0;
+    msg.engine_rpm             = numeric_.count("ENGINE_RPM")
+                                     ? numeric_.at("ENGINE_RPM")         : 0.0;
+    msg.engine_coolant_temp_c  = numeric_.count("ENGINE_COOLANT_TEMP")
+                                     ? numeric_.at("ENGINE_COOLANT_TEMP") : 0.0;
+    msg.battery_voltage_v      = numeric_.count("BATTERY_VOLTAGE")
+                                     ? numeric_.at("BATTERY_VOLTAGE")  : 0.0;
     msg.gear                   = gear_received_ ? gear_ : "unknown";
     msg.from_buffer            = false;
 
