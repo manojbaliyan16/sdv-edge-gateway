@@ -69,6 +69,10 @@ add_subdirectory(src/gateway)
 add_subdirectory(src/security)
 add_subdirectory(src/analytics)
 
+# ─── Tests ────────────────────────────────────────────────────────────────────
+enable_testing()
+add_subdirectory(tests)
+
 # ─── Main executable ──────────────────────────────────────────────────────────
 add_executable(sdv_gateway src/main.cpp)
 

@@ -76,8 +76,16 @@ void CommandHandler::stop()
     }
 
     try {
-        mqtt_client_.unsubscribe(topic_)->wait();
-        mqtt_client_.unsubscribe(diagnosis_topic_)->wait();
+        if (!mqtt_client_.unsubscribe(topic_)->wait_for(SHUTDOWN_UNSUB_TIMEOUT)) {
+            DLT_LOG(ch_ctx, DLT_LOG_WARN,
+                    DLT_STRING("Unsubscribe timed out, proceeding with shutdown:"),
+                    DLT_STRING(topic_.c_str()));
+        }
+        if (!mqtt_client_.unsubscribe(diagnosis_topic_)->wait_for(SHUTDOWN_UNSUB_TIMEOUT)) {
+            DLT_LOG(ch_ctx, DLT_LOG_WARN,
+                    DLT_STRING("Unsubscribe timed out, proceeding with shutdown:"),
+                    DLT_STRING(diagnosis_topic_.c_str()));
+        }
     } catch (const mqtt::exception& e) {
         DLT_LOG(ch_ctx, DLT_LOG_WARN,
                 DLT_STRING("Unsubscribe error:"), DLT_STRING(e.what()));

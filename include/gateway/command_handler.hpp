@@ -97,4 +97,12 @@ private:
     // ── Constants ────────────────────────────────────────────────────────────
     static constexpr int  QOS           = 1;
     static constexpr auto CONSUME_TIMEOUT = std::chrono::seconds(1);
+
+    // stop() must never depend on the broker being alive/responsive — same
+    // lesson as the QoS 2 publish hang fixed in telemetry_publisher.cpp.
+    // unsubscribe()->wait() has no built-in timeout and blocks until UNSUBACK
+    // arrives; if the broker is gone or mid-reconnect, that's forever. Bound
+    // it with wait_for() instead: on timeout it returns false (no exception),
+    // we log and move on rather than hang shutdown.
+    static constexpr auto SHUTDOWN_UNSUB_TIMEOUT = std::chrono::seconds(1);
 };
